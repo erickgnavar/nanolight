@@ -132,26 +132,43 @@ test "System Settings' panes open from the panel, which stays in its window (#12
     tests.press(&t, &.{.{ .command = .insert_newline }});
     try std.testing.expectEqualStrings("x-apple.systempreferences:com.apple.LoginItems-Settings.extension", web.probe.opened[0..web.probe.opened_len]);
     try std.testing.expect(web.probe.hidden);
-    // Every app row, a pane, and Google's completions: the tallest list
-    // with four sections still fits.
+    // Every app row, a pane, and Google's completions: the longest list
+    // with four sections, its pane in view once the selection reaches it.
     s.reveal();
     tests.press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward }, .{ .insert = "sound" } });
     var four: @import("suggest.zig").List = .{};
     for ([_][]const u8{ "sound 1", "sound 2", "sound 3", "sound 4" }) |w| four.push(w);
     s.answered("sound", &four);
     t.settle(1);
+    for (0..s.res.n) |_| {
+        if (s.res.rows[s.sel].kind == .pane) break;
+        _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    }
+    t.frame();
     try std.testing.expect(t.hasText("System Settings"));
     try std.testing.expect(s.height() <= view.max_height);
 }
 
-test "the panel keeps one height, and its list scrolls to the selection" {
-    const gpa = std.testing.allocator;
-    var ix: Index = .init(gpa);
-    defer ix.deinit();
+fn tenApps(ix: *Index) !void {
     for ([_][]const u8{ "Safari", "Mail", "Maps", "Music", "Notes", "Numbers", "Pages", "Photos", "Calendar", "Calculator" }) |n| {
         var buf: [64]u8 = undefined;
         try ix.add(n, try std.fmt.bufPrint(&buf, "/Applications/{s}.app", .{n}));
     }
+}
+
+fn fullList(t: *ui.Tester, s: *view.Nanolight) void {
+    tests.press(t, &.{.{ .insert = "a" }});
+    var four: suggest.List = .{};
+    for ([_][]const u8{ "a1", "a2", "a3", "a4" }) |w| four.push(w);
+    s.answered("a", &four);
+    t.frame();
+}
+
+test "the panel keeps one height, and a long list shows whole rows" {
+    const gpa = std.testing.allocator;
+    var ix: Index = .init(gpa);
+    defer ix.deinit();
+    try tenApps(&ix);
     var web: tests.Web = .{};
     var s: view.Nanolight = .{ .index = &ix };
     defer s.query.deinit();
@@ -165,39 +182,78 @@ test "the panel keeps one height, and its list scrolls to the selection" {
     defer t.deinit();
     t.settle(1);
     try std.testing.expectEqual(view.rows_height, s.last_h);
-    // No rows to speak of: the same height.
     tests.press(&t, &.{.{ .insert = "2+2" }});
     try std.testing.expectEqual(view.rows_height, s.last_h);
-    tests.press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward }, .{ .insert = "a" } });
-    // A full list: the same height, its last row below the fold.
-    var four: suggest.List = .{};
-    for ([_][]const u8{ "a1", "a2", "a3", "a4" }) |w| four.push(w);
-    s.answered("a", &four);
-    t.frame();
+    tests.press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward } });
+    fullList(&t, &s);
     try std.testing.expectEqual(view.rows_height, s.last_h);
-    const fold = view.rows_height - view.footer_h;
     const last = "Search X for “a”";
-    try std.testing.expect((t.findText(last) orelse return error.NoRow).y >= fold);
-    // The arrows bring it into view.
+    const fold = view.rows_height - view.footer_h;
+    // Below the fold it isn't drawn at all, rather than cut in half.
+    try std.testing.expect(!t.hasText(last));
     while (s.sel + 1 < s.res.n) _ = t.shortcut(.{ .key = ui.Shortcut.down });
     t.frame();
     const shown = t.findText(last) orelse return error.NoRow;
     try std.testing.expect(shown.y + shown.h <= fold);
-    // The wheel looks elsewhere, and stays there.
-    t.scroll(view.width / 2, 200, 80);
+    // The wheel looks elsewhere a row at a time, and stays there.
+    t.scroll(view.width / 2, 200, 40);
+    try std.testing.expect(!t.hasText(last));
     t.settle(1);
-    const looked = t.findText(last) orelse return error.NoRow;
-    try std.testing.expect(looked.y != shown.y);
-    t.settle(1);
-    try std.testing.expectEqual(looked.y, (t.findText(last) orelse return error.NoRow).y);
-    // Round to the first row: the top again.
+    try std.testing.expect(!t.hasText(last));
+    // The selection moves, and the list follows it: round to the first row.
     _ = t.shortcut(.{ .key = ui.Shortcut.down });
     t.frame();
     try std.testing.expectEqual(@as(usize, 0), s.sel);
-    try std.testing.expect((t.findText(last) orelse return error.NoRow).y >= fold);
+    try std.testing.expect(!t.hasText(last));
+    try std.testing.expect(t.hasText("Applications"));
 }
 
-test "the highlight slides within a list, not as the list changes" {
+test "a frame shows the state it was built for: nothing is on its way" {
+    const gpa = std.testing.allocator;
+    var ix: Index = .init(gpa);
+    defer ix.deinit();
+    try tenApps(&ix);
+    var web: tests.Web = .{};
+    var s: view.Nanolight = .{ .index = &ix };
+    defer s.query.deinit();
+    s.host = web.host();
+    s.reveal();
+    var t: ui.Tester = undefined;
+    try t.init(gpa, .init(&s, view.Nanolight.view), .{ .width = view.width, .height = view.rows_height, .scale = 1 });
+    defer t.deinit();
+    t.settle(1);
+    fullList(&t, &s);
+    const steps = [_]enum { down, wheel_down, wheel_up, typed, answer, up }{ .down, .wheel_down, .wheel_up, .typed, .answer, .up };
+    for (steps) |step| {
+        switch (step) {
+            .down => {
+                for (0..8) |_| _ = t.shortcut(.{ .key = ui.Shortcut.down });
+            },
+            .up => _ = t.shortcut(.{ .key = ui.Shortcut.up }),
+            .wheel_down => t.scroll(view.width / 2, 200, -40),
+            .wheel_up => t.scroll(view.width / 2, 200, 40),
+            .typed => t.textOps(&.{.{ .insert = "b" }}),
+            .answer => {
+                var said: suggest.List = .{};
+                for ([_][]const u8{ "ab1", "ab2" }) |w| said.push(w);
+                s.answered("ab", &said);
+                t.frame();
+            },
+        }
+        // The frame after the change, against one well after it: below the
+        // field, whose caret blinks, they are the same pixels.
+        try std.testing.expect(!t.ctx.animating);
+        const now = try t.render(gpa);
+        defer now.deinit(gpa);
+        t.advance(2);
+        const later = try t.render(gpa);
+        defer later.deinit(gpa);
+        const from = @as(usize, view.header_h + 1) * now.width * 4;
+        try std.testing.expectEqualSlices(u8, later.bytes[from..], now.bytes[from..]);
+    }
+}
+
+test "Google's last rows hold their places until it answers" {
     const gpa = std.testing.allocator;
     var ix: Index = .init(gpa);
     defer ix.deinit();
@@ -211,18 +267,25 @@ test "the highlight slides within a list, not as the list changes" {
     try t.init(gpa, .init(&s, view.Nanolight.view), .{ .width = view.width, .height = view.max_height });
     defer t.deinit();
     t.settle(1);
-    tests.press(&t, &.{.{ .insert = "liquid gl" }});
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    t.settle(1);
-    // Google's rows land above the selection: its row moves at once, and
-    // the highlight with it, not after it.
+    tests.press(&t, &.{.{ .insert = "liq" }});
     var said: suggest.List = .{};
-    for ([_][]const u8{ "liquid glass", "liquid glass apple" }) |w| said.push(w);
-    s.answered("liquid gl", &said);
+    for ([_][]const u8{ "liquid", "liquid glass" }) |w| said.push(w);
+    s.answered("liq", &said);
     t.frame();
-    try std.testing.expect(!t.ctx.animating);
-    // The arrows still slide it.
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    try std.testing.expect(t.ctx.animating);
+    const grok = (t.findText("Ask Grok “liq”") orelse return error.NoRow).y;
+    // A letter neither begins with: asked about, and nothing below moves.
+    tests.press(&t, &.{.{ .insert = "x" }});
+    try std.testing.expectEqualStrings("liqx", web.asked[0..web.asked_len]);
+    try std.testing.expect(t.hasText("liquid glass"));
+    try std.testing.expectEqual(grok, (t.findText("Ask Grok “liqx”") orelse return error.NoRow).y);
+    // The answer replaces them.
+    var more: suggest.List = .{};
+    for ([_][]const u8{ "liqxa", "liqxb" }) |w| more.push(w);
+    s.answered("liqx", &more);
+    t.frame();
+    try std.testing.expect(!t.hasText("liquid glass"));
+    try std.testing.expectEqual(grok, (t.findText("Ask Grok “liqx”") orelse return error.NoRow).y);
+    // Words that are never asked about keep no rows.
+    tests.press(&t, &.{.{ .insert = ".org" }});
+    try std.testing.expectEqual(@as(usize, 0), s.web.n);
 }

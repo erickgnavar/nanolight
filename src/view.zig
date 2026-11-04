@@ -1,6 +1,6 @@
 //! The launcher panel: the query, then what it finds in sections, then a
 //! footer naming what Return does. Neutral glass, a hairline rim, 40-point
-//! rows, the selection a grey step that slides between them. Nothing moves
+//! rows, the selection a grey step on its row. Nothing moves
 //! while nothing happens: frames come from keys.
 const std = @import("std");
 const nanoui = @import("nanoui");
@@ -11,6 +11,7 @@ const results = @import("results.zig");
 const files = @import("files.zig");
 const files_view = @import("files_view.zig");
 const answers = @import("answers.zig");
+const row_window = @import("row_window.zig");
 const suggest = @import("suggest.zig");
 const text = @import("text.zig");
 const settings_view = @import("settings_view.zig");
@@ -53,7 +54,7 @@ const list_pad = 6;
 /// The room a window leaves round the panel for its shadow (`Nanolight.margin`).
 pub const shadow_margin: f32 = 40;
 /// The panel with its rows: one height, whatever they are, about eight
-/// rows' worth; a longer list scrolls inside it.
+/// rows' worth; a longer list shows the whole rows that fit (row_window.zig).
 pub const rows_height: f32 = header_h + footer_h + 2 + list_h;
 const list_h: f32 = list_pad * 2 + 8 * row_h;
 /// The tallest the panel gets: a search's page, or Settings. The window is
@@ -67,7 +68,6 @@ pub fn webArea(h: f32) struct { y: f32, h: f32 } {
 }
 /// Opening: snappy, a touch under critical damping.
 pub const spring: motion.Spring = .{ .stiffness = 320, .damping = 32 };
-const slide: motion.Spring = .{ .stiffness = 700, .damping = 52 };
 
 pub const Palette = @import("palette.zig").Palette;
 pub const palette = @import("palette.zig").palette;
@@ -98,10 +98,10 @@ pub const Nanolight = struct {
     spans: [results.max_rows][16]ui.Span = undefined,
     url_buf: [1024]u8 = undefined,
     last_h: f32 = 0,
-    /// Counts the lists shown: each new one puts the highlight in place.
+    /// Counts the lists shown.
     list_gen: u32 = 0,
-    /// The list and the selection last scrolled to (`keepInView`).
-    kept: u64 = 0,
+    /// The rows of a long list in view.
+    in_view: row_window.Window = .{},
     /// The query as it was shown: selected, so no completion after it yet.
     revealed: u64 = 0,
     /// Said in the footer in place of the name ("Updated to 0.1.3"), if set.
@@ -306,9 +306,15 @@ pub const Nanolight = struct {
         if (h == s.built) return;
         s.built = h;
         files_view.rebuild(s);
+        const was = s.web;
         s.web.n = 0;
         if (s.host) |host| if (host.suggest) |ask| if (s.suggest_on and suggest.eligible(q) and @import("calc.zig").eval(q) == null) {
-            if (!s.cache.lookup(q, &s.web)) ask(host.ctx, q);
+            if (!s.cache.lookup(q, &s.web)) {
+                // Until Google answers, its last rows hold their places, or
+                // every row under them would go up and come back with each key.
+                if (s.web.n < was.n) s.web = was;
+                ask(host.ctx, q);
+            }
         };
         s.fill();
         // The first row: an app, the answer, or the search for what was
@@ -328,33 +334,22 @@ pub const Nanolight = struct {
     pub const filesAnswered = files_view.filesAnswered;
 
     fn list(s: *Nanolight, c: *ui.Context, p: Palette) void {
-        const scroller = ui.div(c).column().wFull().h(list_h).scrollY().scrollbar(.{ .overlay = p.sub.alpha(0.5) });
-        defer scroller.end();
-        const box = ui.div(c).column().wFull().p(list_pad);
+        const box = ui.div(c).column().wFull().h(list_h).p(list_pad);
         defer box.end();
-        // Where the selected row is, so the highlight can slide to it.
-        var y: f32 = 0;
-        var sel_y: f32 = 0;
-        var sel_h: f32 = row_h;
-        var sel_top: f32 = 0;
-        for (s.res.slice(), 0..) |r, i| {
-            const top = y;
-            if (s.res.section(i) != null) y += section_h;
+        const rows = s.res.slice();
+        var heights: [results.max_rows]f32 = undefined;
+        for (rows, 0..) |r, i| {
             const rh: f32 = if (r.kind == .calc) calc_h else row_h;
-            if (i == s.sel) {
-                sel_y = y;
-                sel_h = rh;
-                sel_top = top;
-            }
-            y += rh;
+            const head: f32 = if (s.res.section(i) != null) section_h else 0;
+            heights[i] = rh + head;
         }
-        s.keepInView(c, scroller.id(), sel_top, sel_y + sel_h + list_pad * 2);
-        // A new list: the highlight is there at once; moving in it, it slides.
-        const fresh = c.print("{d}", .{s.list_gen});
-        const hy = motion.number(c, fresh, sel_y, .{ .spring = slide });
-        const hh = motion.number(c, c.print("{d}h", .{s.list_gen}), sel_h, .{ .spring = slide });
-        ui.div(c).absolute().offset(0, hy).w(width - list_pad * 2).h(hh).rounded(10).bg(p.sel).border(p.rim).end();
-        for (s.res.slice(), 0..) |r, i| {
+        const room = list_h - list_pad * 2;
+        // Nothing scrolls here, so the wheel comes to the view.
+        c.wants_wheel = true;
+        s.in_view.update(heights[0..rows.len], s.sel, s.list_gen, room, c.input.scroll.y, c.input.precise);
+        const first = s.in_view.first;
+        const after = row_window.end(heights[0..rows.len], first, room);
+        for (rows[first..after], first..) |r, i| {
             if (s.res.section(i)) |name| {
                 const head = ui.div(c).row().wFull().h(section_h).px(12).pb(6).itemsEnd();
                 defer head.end();
@@ -362,23 +357,19 @@ pub const Nanolight = struct {
             }
             s.row(c, p, i, r);
         }
-    }
-
-    /// Scrolls `id` to show `top`…`bottom` as the selection or the list
-    /// changes, and only then: between, the wheel may look elsewhere.
-    fn keepInView(s: *Nanolight, c: *ui.Context, id: u64, top: f32, bottom: f32) void {
-        const at = @as(u64, s.list_gen) << 32 | s.sel;
-        if (at == s.kept) return;
-        s.kept = at;
-        const now = c.scroll.get(id) orelse 0;
-        const to = if (top < now) top else if (bottom > now + list_h) bottom - list_h else now;
-        if (to != now) c.scroll.put(c.gpa, id, to) catch {};
+        // More than fits: where the rows in view are in the list.
+        if (after - first < rows.len) {
+            const per = room / @as(f32, @floatFromInt(rows.len));
+            ui.div(c).absolute().offset(width - list_pad * 2 + 1, per * @as(f32, @floatFromInt(first))).w(3)
+                .h(per * @as(f32, @floatFromInt(after - first))).roundedFull().bg(p.sub.alpha(0.35)).end();
+        }
     }
 
     fn row(s: *Nanolight, c: *ui.Context, p: Palette, i: usize, r: Row) void {
         const big = r.kind == .calc;
         const d = ui.div(c).row().wFull().h(if (big) calc_h else row_h).px(10).gap(12).itemsCenter().control();
         defer d.end();
+        if (i == s.sel) _ = d.rounded(10).bg(p.sel).border(p.rim);
         if (d.clicked()) {
             s.sel = i;
             s.activate(c);
