@@ -212,7 +212,7 @@ pub const Live = struct {
         const q = l.asking[0..l.asking_len];
         // Typed on, or turned off, while it waited.
         if (!l.s.suggest_on or !suggest.same(q, l.s.query.text())) return;
-        const a = l.app.gpa.create(Ask) catch return;
+        const a = l.app.gpa.create(Ask) catch return l.s.unanswered(q);
         a.* = .{ .live = l, .len = q.len };
         @memcpy(a.text[0..q.len], q);
         var buf: [512]u8 = undefined;
@@ -227,7 +227,7 @@ pub const Live = struct {
     fn showPage(ctx: *anyopaque, url: ?[]const u8) void {
         const l: *Live = @ptrCast(@alignCast(ctx));
         const w = l.window orelse return;
-        if (url) |u| l.preview.show(w, u, l.s.last_h) else l.preview.hide();
+        if (url) |u| panel.showPage(&l.preview, w, u, l.s.last_h) else panel.hidePage(&l.preview, w);
     }
 
     /// Escape or ⌘↩ while the page has the keys.
@@ -468,13 +468,12 @@ const Ask = struct {
     fn done(a: *Ask, r: nanoui.http.Response) void {
         const l = a.live;
         defer l.app.gpa.destroy(a);
-        if (r.status != 200) return;
+        defer if (l.window) |w| w.redraw();
         var arena: std.heap.ArenaAllocator = .init(l.app.gpa);
         defer arena.deinit();
         var list: suggest.List = .{};
-        if (!suggest.decode(arena.allocator(), r.body, a.text[0..a.len], &list)) return;
+        if (r.status != 200 or !suggest.decode(arena.allocator(), r.body, a.text[0..a.len], &list)) return l.s.unanswered(a.text[0..a.len]);
         l.s.answered(a.text[0..a.len], &list);
-        if (l.window) |w| w.redraw();
     }
 };
 

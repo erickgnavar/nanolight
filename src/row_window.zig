@@ -59,8 +59,11 @@ pub const Window = struct {
         if (dy * w.wheel < 0) w.wheel = 0;
         w.wheel += dy;
         const step = if (precise) precise_step else notch_step;
-        while (w.wheel >= step) : (w.wheel -= step) w.first -|= 1;
-        while (w.wheel <= -step) : (w.wheel += step) w.first += 1;
+        const rows = @trunc(w.wheel / step);
+        w.wheel -= rows * step;
+        // No list is longer than this: a huge delta is only its end.
+        const moved: usize = @intFromFloat(@min(@abs(rows), 64));
+        w.first = if (rows > 0) w.first -| moved else w.first + moved;
         w.first = @min(w.first, last(heights, room));
     }
 };
@@ -103,7 +106,7 @@ test "the wheel moves whole rows, and leaves the selection alone until it change
     // A notch is a row; past the end it stops.
     w.update(&eight, 0, 1, 320, -12, false);
     try t.expectEqual(@as(usize, 2), w.first);
-    w.update(&eight, 0, 1, 320, -1200, false);
+    w.update(&eight, 0, 1, 320, -1e9, false);
     try t.expectEqual(@as(usize, 4), w.first);
     // It stays looking there, with row 0 out of view...
     w.update(&eight, 0, 1, 320, 0, false);

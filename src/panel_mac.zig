@@ -11,9 +11,10 @@ const Preview = @import("preview.zig").Preview;
 
 /// The system's glass under the panel, which the window's views keep.
 var glass: ?objc.Object = null;
-/// The height the glass and the page move to with the next frame shown,
-/// and the page.
+/// What moves with the next frame shown: the height the glass and the page
+/// go to, whether the page comes (true) or goes, and the page.
 var wanted: ?f32 = null;
+var page_to: ?bool = null;
 var page: ?*Preview = null;
 
 pub fn adjust(o: *nanoui.WindowOptions, hidden: bool, h: f32) void {
@@ -58,6 +59,28 @@ pub fn resize(_: *nanoui.Window, h: f32, p: *Preview) void {
     page = p;
 }
 
+/// The page, loading now and seen with the frame that makes room for it;
+/// shown sooner, it stood over the rows.
+pub fn showPage(p: *Preview, w: *nanoui.Window, url: []const u8, h: f32) void {
+    page = p;
+    p.load(w, url, h);
+    page_to = true;
+    requestFrame(w);
+}
+
+/// The page, gone with the frame that replaces it: gone sooner, the last
+/// frame under it ("Searching Google…") showed for a refresh.
+pub fn hidePage(p: *Preview, w: *nanoui.Window) void {
+    page = p;
+    page_to = false;
+    requestFrame(w);
+}
+
+/// Not while hidden: a showing draws everything anyway.
+fn requestFrame(w: *nanoui.Window) void {
+    if (w.isVisible()) if (w.surface) |surface| surface.requestFrame();
+}
+
 const Step = enum { wait, ask, move };
 
 /// What a built frame does about a height still wanted: a frame with a
@@ -71,7 +94,7 @@ fn stepFor(has_drawable: bool, visible: bool) Step {
 /// True when native views moved: nanoui then presents this frame in the
 /// same transaction as they move.
 fn afterFrame(_: ?*anyopaque, s: *nanoui.Surface) bool {
-    const h = wanted orelse return false;
+    if (wanted == null and page_to == null) return false;
     switch (stepFor(s.renderer.given_drawable != null, s.visible())) {
         .wait => return false,
         .ask => {
@@ -80,11 +103,15 @@ fn afterFrame(_: ?*anyopaque, s: *nanoui.Surface) bool {
         },
         .move => {},
     }
-    wanted = null;
     // The glass's own layers would otherwise ease to their new size.
     objc.msg(void, objc.class("CATransaction"), "setDisableActions:", .{objc.YES});
-    if (glass) |g| objc.msg(void, g, "setFrame:", .{glassFrame(h)});
-    if (page) |p| p.fit(h);
+    if (wanted) |h| {
+        if (glass) |g| objc.msg(void, g, "setFrame:", .{glassFrame(h)});
+        if (page) |p| p.fit(h);
+    }
+    if (page) |p| if (page_to) |on| if (on) p.uncover() else p.hide();
+    wanted = null;
+    page_to = null;
     return true;
 }
 

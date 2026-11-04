@@ -22,14 +22,19 @@ pub const Preview = struct {
     ui_delegate: ?objc.Object = null,
     watcher: ?Watch = null,
 
-    /// Shows `url` over the panel of `window`, which is `h` tall now.
-    pub fn show(p: *Preview, window: *nanoui.Window, url: []const u8, h: f32) void {
+    /// Loads `url` over the panel of `window`, which is `h` tall now, unseen
+    /// until `uncover`.
+    pub fn load(p: *Preview, window: *nanoui.Window, url: []const u8, h: f32) void {
         const pool = objc.Pool.push();
         defer pool.pop();
         const web = p.web orelse p.make(window) orelse return;
         const u = objc.msg(?objc.Object, objc.class("NSURL"), "URLWithString:", .{objc.nsString(url)}) orelse return;
         _ = objc.msg(?objc.Object, web, "loadRequest:", .{objc.msg(objc.Object, objc.class("NSURLRequest"), "requestWithURL:", .{u})});
         p.fit(h);
+    }
+
+    pub fn uncover(p: *Preview) void {
+        const web = p.web orelse return;
         objc.msg(void, web, "setHidden:", .{objc.NO});
     }
 
@@ -95,6 +100,8 @@ pub const Preview = struct {
         const delegate = objc.msg(objc.Object, cls, "new", .{});
         objc.msg(void, web, "setUIDelegate:", .{delegate});
         // Above the panel's drawing (a subview added last is on top).
+        // Unseen until the frame that makes room for it (`uncover`).
+        objc.msg(void, web, "setHidden:", .{objc.YES});
         objc.msg(void, host, "addSubview:", .{web});
         p.web = web;
         p.ui_delegate = delegate;

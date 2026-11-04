@@ -7,7 +7,6 @@
 //! nothing the app keeps.
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
-const motion = ui.motion;
 const panel = @import("view.zig");
 const shortcut = @import("shortcut.zig");
 const account = @import("account.zig");
@@ -82,8 +81,7 @@ pub const Settings = struct {
         if (s.sel >= rows.len) s.sel = rows.len - 1;
         s.keys(c, n, rows);
         ui.key(c, "settings");
-        const f = motion.frame(c, .{ .initial = .{ .opacity = 0, .x = 14 }, .transition = .{ .spring = panel.spring } });
-        const page = ui.div(c).column().wFull().grow().motion(f);
+        const page = ui.div(c).column().wFull().grow();
         defer page.end();
         head(c, p);
         s.body(c, n, p, rows);

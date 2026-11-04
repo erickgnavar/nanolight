@@ -53,10 +53,12 @@ pub const footer_h = 38;
 const list_pad = 6;
 /// The room a window leaves round the panel for its shadow (`Nanolight.margin`).
 pub const shadow_margin: f32 = 40;
-/// The panel with its rows: one height, whatever they are, about eight
-/// rows' worth; a longer list shows the whole rows that fit (row_window.zig).
+/// The panel with its rows: one height, whatever they are: eight rows and
+/// two section heads, so a full list of apps ends in the search for what was
+/// typed and a completion, with no gap under them. A longer list shows the
+/// whole rows that fit (row_window.zig).
 pub const rows_height: f32 = header_h + footer_h + 2 + list_h;
-const list_h: f32 = list_pad * 2 + 8 * row_h;
+const list_h: f32 = list_pad * 2 + 8 * row_h + 2 * section_h;
 /// The tallest the panel gets: a search's page, or Settings. The window is
 /// this tall.
 pub const max_height: f32 = header_h + footer_h + 2 + list_pad * 2 + results.max_rows * row_h + 3 * section_h;
@@ -310,9 +312,7 @@ pub const Nanolight = struct {
         s.web.n = 0;
         if (s.host) |host| if (host.suggest) |ask| if (s.suggest_on and suggest.eligible(q) and @import("calc.zig").eval(q) == null) {
             if (!s.cache.lookup(q, &s.web)) {
-                // Until Google answers, its last rows hold their places, or
-                // every row under them would go up and come back with each key.
-                if (s.web.n < was.n) s.web = was;
+                answers.hold(&s.web, &was, q);
                 ask(host.ctx, q);
             }
         };
@@ -331,6 +331,7 @@ pub const Nanolight = struct {
     }
 
     pub const answered = answers.answered;
+    pub const unanswered = answers.unanswered;
     pub const filesAnswered = files_view.filesAnswered;
 
     fn list(s: *Nanolight, c: *ui.Context, p: Palette) void {
