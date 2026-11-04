@@ -7,9 +7,14 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const objc = nanoui.objc;
 const view = @import("view.zig");
+const Preview = @import("preview.zig").Preview;
 
 /// The system's glass under the panel, which the window's views keep.
 var glass: ?objc.Object = null;
+/// The height the glass and the page move to with the next frame shown,
+/// and the page.
+var wanted: ?f32 = null;
+var page: ?*Preview = null;
 
 pub fn adjust(o: *nanoui.WindowOptions, hidden: bool, h: f32) void {
     o.width = if (hidden) view.width else view.width + 2 * view.shadow_margin;
@@ -26,6 +31,7 @@ pub fn setup(app: *nanoui.App, w: *nanoui.Window, s: *view.Nanolight, h: f32) vo
     s.window_fades = true;
     objc.msg(void, w.nswindow, "setHasShadow:", .{objc.NO});
     glass = backdrop(w, 18, h);
+    if (w.surface) |surface| surface.after_frame = afterFrame;
 }
 
 /// A fifth of the way down the main screen, centered.
@@ -43,11 +49,43 @@ pub fn place(w: *nanoui.Window) void {
     objc.msg(void, w.nswindow, "setAlphaValue:", .{@as(f64, 0)});
 }
 
-/// The glass to the panel's height, in the frame that draws it (a view's
-/// frame, not the window's: nothing is laid out again).
-pub fn resize(_: *nanoui.Window, h: f32) void {
-    const g = glass orelse return;
-    objc.msg(void, g, "setFrame:", .{glassFrame(h)});
+/// The glass and the page to the panel's height, in the frame that shows
+/// it: a key's frame only builds the panel, and its pixels come with the
+/// display's next refresh. Moved sooner, the glass stood a frame or two
+/// without the panel, or the panel's rows hung off the glass.
+pub fn resize(_: *nanoui.Window, h: f32, p: *Preview) void {
+    wanted = h;
+    page = p;
+}
+
+const Step = enum { wait, ask, move };
+
+/// What a built frame does about a height still wanted: a frame with a
+/// drawable is shown now, so everything moves with it; a visible one
+/// without asks for one; a hidden window waits, drawing nothing, to show.
+fn stepFor(has_drawable: bool, visible: bool) Step {
+    if (has_drawable) return .move;
+    return if (visible) .ask else .wait;
+}
+
+/// True when native views moved: nanoui then presents this frame in the
+/// same transaction as they move.
+fn afterFrame(_: ?*anyopaque, s: *nanoui.Surface) bool {
+    const h = wanted orelse return false;
+    switch (stepFor(s.renderer.given_drawable != null, s.visible())) {
+        .wait => return false,
+        .ask => {
+            s.requestFrame();
+            return false;
+        },
+        .move => {},
+    }
+    wanted = null;
+    // The glass's own layers would otherwise ease to their new size.
+    objc.msg(void, objc.class("CATransaction"), "setDisableActions:", .{objc.YES});
+    if (glass) |g| objc.msg(void, g, "setFrame:", .{glassFrame(h)});
+    if (page) |p| p.fit(h);
+    return true;
 }
 
 /// Whether the panel has the keys.
@@ -112,4 +150,11 @@ fn backdrop(w: *nanoui.Window, radius: f64, height: f32) ?objc.Object {
 fn glassFrame(h: f32) objc.CGRect {
     const m = view.shadow_margin;
     return .{ .origin = .{ .x = m, .y = m }, .size = .{ .width = view.width, .height = h } };
+}
+
+test "the glass moves only with a frame that is being shown" {
+    try std.testing.expectEqual(Step.move, stepFor(true, true));
+    try std.testing.expectEqual(Step.ask, stepFor(false, true));
+    // Hidden, nothing asks for frames: an idle Nanolight stays idle.
+    try std.testing.expectEqual(Step.wait, stepFor(false, false));
 }

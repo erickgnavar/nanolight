@@ -78,7 +78,7 @@ pub fn place(w: *nanoui.Window) void {
     set_time(gw, t);
 }
 
-pub fn resize(w: *nanoui.Window, h: f32) void {
+pub fn resize(w: *nanoui.Window, h: f32, _: anytype) void {
     w.setSize(view.width, @ceil(h));
 }
 

@@ -28,6 +28,7 @@ test {
         .macos => {
             _ = @import("single_mac.zig");
             _ = @import("clickthrough.zig");
+            _ = @import("panel_mac.zig");
             _ = @import("hotkey_mac.zig");
             _ = @import("recorder.zig");
         },

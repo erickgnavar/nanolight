@@ -95,6 +95,8 @@ pub const Nanolight = struct {
     spans: [results.max_rows][16]ui.Span = undefined,
     url_buf: [1024]u8 = undefined,
     last_h: f32 = 0,
+    /// Counts the lists shown: each new one puts the highlight in place.
+    list_gen: u32 = 0,
     /// The height kept while Google is asked (answers.zig); 0 when it isn't.
     held_h: f32 = 0,
     /// The query as it was shown: selected, so no completion after it yet.
@@ -328,6 +330,7 @@ pub const Nanolight = struct {
     }
 
     pub fn fill(s: *Nanolight) void {
+        s.list_gen +%= 1;
         var sug: [results.max_apps]u32 = undefined;
         const ns = s.index.suggestions(&sug);
         var web: [suggest.max_rows][]const u8 = undefined;
@@ -355,9 +358,9 @@ pub const Nanolight = struct {
             y += rh;
         }
         // A new list: the highlight is there at once; moving in it, it slides.
-        const fresh = c.print("{d}", .{s.built});
+        const fresh = c.print("{d}", .{s.list_gen});
         const hy = motion.number(c, fresh, sel_y, .{ .spring = slide });
-        const hh = motion.number(c, c.print("{d}h", .{s.built}), sel_h, .{ .spring = slide });
+        const hh = motion.number(c, c.print("{d}h", .{s.list_gen}), sel_h, .{ .spring = slide });
         ui.div(c).absolute().offset(0, hy).w(width - list_pad * 2).h(hh).rounded(10).bg(p.sel).border(p.rim).end();
         for (s.res.slice(), 0..) |r, i| {
             if (s.res.section(i)) |name| {

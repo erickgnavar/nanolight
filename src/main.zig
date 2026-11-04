@@ -335,10 +335,9 @@ pub const Live = struct {
     /// The window (or the Mac's glass under the panel) to its height.
     fn resize(ctx: *anyopaque, h: f32) void {
         const l: *Live = @ptrCast(@alignCast(ctx));
-        l.preview.fit(h);
         // The panel grew or shrank under a still pointer.
         l.through.update();
-        if (l.window) |w| panel.resize(w, h);
+        if (l.window) |w| panel.resize(w, h, &l.preview);
     }
 
     fn toggle(ctx: *anyopaque) void {

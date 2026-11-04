@@ -192,3 +192,33 @@ test "the panel's height lands at once, and keeps Google's room between keys" {
     try std.testing.expectEqual(s.height(), s.last_h);
     try std.testing.expectEqual(@as(f32, 0), s.held_h);
 }
+
+test "the highlight slides within a list, not as the list changes" {
+    const gpa = std.testing.allocator;
+    var ix: Index = .init(gpa);
+    defer ix.deinit();
+    try ix.add("Safari", "/Applications/Safari.app");
+    var web: tests.Web = .{};
+    var s: view.Nanolight = .{ .index = &ix };
+    defer s.query.deinit();
+    s.host = web.host();
+    s.reveal();
+    var t: ui.Tester = undefined;
+    try t.init(gpa, .init(&s, view.Nanolight.view), .{ .width = view.width, .height = view.max_height });
+    defer t.deinit();
+    t.settle(1);
+    tests.press(&t, &.{.{ .insert = "liquid gl" }});
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    t.settle(1);
+    // Google's rows land above the selection: its row moves at once, and
+    // the highlight with it, not after it.
+    var said: suggest.List = .{};
+    for ([_][]const u8{ "liquid glass", "liquid glass apple" }) |w| said.push(w);
+    s.answered("liquid gl", &said);
+    t.frame();
+    try std.testing.expect(!t.ctx.animating);
+    // The arrows still slide it.
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    try std.testing.expect(t.ctx.animating);
+}
