@@ -52,9 +52,12 @@ pub const footer_h = 38;
 const list_pad = 6;
 /// The room a window leaves round the panel for its shadow (`Nanolight.margin`).
 pub const shadow_margin: f32 = 40;
-/// The tallest the panel gets: every app row, the three web rows and
-/// Google's completions, under three section heads (math lists fewer), or
-/// a search's page. The window is this tall.
+/// The panel with its rows: one height, whatever they are, about eight
+/// rows' worth; a longer list scrolls inside it.
+pub const rows_height: f32 = header_h + footer_h + 2 + list_h;
+const list_h: f32 = list_pad * 2 + 8 * row_h;
+/// The tallest the panel gets: a search's page, or Settings. The window is
+/// this tall.
 pub const max_height: f32 = header_h + footer_h + 2 + list_pad * 2 + results.max_rows * row_h + 3 * section_h;
 
 /// Where a search's page goes in a panel `h` tall: from `y` down from its
@@ -97,8 +100,8 @@ pub const Nanolight = struct {
     last_h: f32 = 0,
     /// Counts the lists shown: each new one puts the highlight in place.
     list_gen: u32 = 0,
-    /// The height kept while Google is asked (answers.zig); 0 when it isn't.
-    held_h: f32 = 0,
+    /// The list and the selection last scrolled to (`keepInView`).
+    kept: u64 = 0,
     /// The query as it was shown: selected, so no completion after it yet.
     revealed: u64 = 0,
     /// Said in the footer in place of the name ("Updated to 0.1.3"), if set.
@@ -133,23 +136,12 @@ pub const Nanolight = struct {
         s.query.focus();
     }
 
-    /// The panel's height for the rows it lists.
+    /// The panel's height for what it shows.
     pub fn height(s: *const Nanolight) f32 {
         if (s.settings_ui.open) return settings_view.height;
         if (s.ext) |e| if (e.open) return e.height();
         if (s.previewing) return max_height;
-        return @max(s.rowsHeight(), s.held_h);
-    }
-
-    fn rowsHeight(s: *const Nanolight) f32 {
-        var h: f32 = header_h + footer_h + 1;
-        if (s.res.n == 0) return h;
-        h += 1 + list_pad * 2;
-        for (s.res.slice(), 0..) |r, i| {
-            h += if (r.kind == .calc) calc_h else row_h;
-            if (s.res.section(i) != null) h += section_h;
-        }
-        return h;
+        return rows_height;
     }
 
     /// The window's view: the panel, `margin` in from the window's edges.
@@ -315,13 +307,8 @@ pub const Nanolight = struct {
         s.built = h;
         files_view.rebuild(s);
         s.web.n = 0;
-        const held = @max(s.held_h, s.rowsHeight());
-        s.held_h = 0;
         if (s.host) |host| if (host.suggest) |ask| if (s.suggest_on and suggest.eligible(q) and @import("calc.zig").eval(q) == null) {
-            if (!s.cache.lookup(q, &s.web)) {
-                s.held_h = held;
-                ask(host.ctx, q);
-            }
+            if (!s.cache.lookup(q, &s.web)) ask(host.ctx, q);
         };
         s.fill();
         // The first row: an app, the answer, or the search for what was
@@ -338,25 +325,30 @@ pub const Nanolight = struct {
     }
 
     pub const answered = answers.answered;
-    pub const unanswered = answers.unanswered;
     pub const filesAnswered = files_view.filesAnswered;
 
     fn list(s: *Nanolight, c: *ui.Context, p: Palette) void {
+        const scroller = ui.div(c).column().wFull().h(list_h).scrollY().scrollbar(.{ .overlay = p.sub.alpha(0.5) });
+        defer scroller.end();
         const box = ui.div(c).column().wFull().p(list_pad);
         defer box.end();
         // Where the selected row is, so the highlight can slide to it.
         var y: f32 = 0;
         var sel_y: f32 = 0;
         var sel_h: f32 = row_h;
+        var sel_top: f32 = 0;
         for (s.res.slice(), 0..) |r, i| {
+            const top = y;
             if (s.res.section(i) != null) y += section_h;
             const rh: f32 = if (r.kind == .calc) calc_h else row_h;
             if (i == s.sel) {
                 sel_y = y;
                 sel_h = rh;
+                sel_top = top;
             }
             y += rh;
         }
+        s.keepInView(c, scroller.id(), sel_top, sel_y + sel_h + list_pad * 2);
         // A new list: the highlight is there at once; moving in it, it slides.
         const fresh = c.print("{d}", .{s.list_gen});
         const hy = motion.number(c, fresh, sel_y, .{ .spring = slide });
@@ -370,6 +362,17 @@ pub const Nanolight = struct {
             }
             s.row(c, p, i, r);
         }
+    }
+
+    /// Scrolls `id` to show `top`…`bottom` as the selection or the list
+    /// changes, and only then: between, the wheel may look elsewhere.
+    fn keepInView(s: *Nanolight, c: *ui.Context, id: u64, top: f32, bottom: f32) void {
+        const at = @as(u64, s.list_gen) << 32 | s.sel;
+        if (at == s.kept) return;
+        s.kept = at;
+        const now = c.scroll.get(id) orelse 0;
+        const to = if (top < now) top else if (bottom > now + list_h) bottom - list_h else now;
+        if (to != now) c.scroll.put(c.gpa, id, to) catch {};
     }
 
     fn row(s: *Nanolight, c: *ui.Context, p: Palette, i: usize, r: Row) void {

@@ -139,7 +139,7 @@ pub const Results = struct {
         var pane_rows: [max_panes]search.Ranked = undefined;
         const np = if (settings) 0 else panes.rank(query, &pane_rows);
         // One row pays for each section head beyond the original three, so
-        // the panel never grows past its tallest (view.max_height).
+        // a full list stays one length.
         const heads: usize = 2 + @as(usize, @intFromBool(n > 0)) + @as(usize, @intFromBool(np > 0)) +
             @as(usize, @intFromBool(settings)) + @as(usize, @intFromBool(found.n > 0));
         const limit = max_rows -| (heads -| 3);
@@ -288,7 +288,7 @@ test "queries are escaped into the address" {
     try std.testing.expectEqualStrings("https://x.com/search?f=live&q=liquid+glass+%26+UI", url(&buf, .search_x, " liquid glass & UI "));
 }
 
-test "System Settings' panes come under the apps and keep the panel's height (#12)" {
+test "System Settings' panes come under the apps and keep the list's length (#12)" {
     if (!mac) return error.SkipZigTest;
     const t = std.testing;
     var ix = try testIndex(t.allocator, &.{ "Safari", "System Settings", "Calculator" });

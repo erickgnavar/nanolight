@@ -144,10 +144,14 @@ test "System Settings' panes open from the panel, which stays in its window (#12
     try std.testing.expect(s.height() <= view.max_height);
 }
 
-test "the panel's height lands at once, and keeps Google's room between keys" {
+test "the panel keeps one height, and its list scrolls to the selection" {
     const gpa = std.testing.allocator;
     var ix: Index = .init(gpa);
     defer ix.deinit();
+    for ([_][]const u8{ "Safari", "Mail", "Maps", "Music", "Notes", "Numbers", "Pages", "Photos", "Calendar", "Calculator" }) |n| {
+        var buf: [64]u8 = undefined;
+        try ix.add(n, try std.fmt.bufPrint(&buf, "/Applications/{s}.app", .{n}));
+    }
     var web: tests.Web = .{};
     var s: view.Nanolight = .{ .index = &ix };
     defer s.query.deinit();
@@ -159,38 +163,38 @@ test "the panel's height lands at once, and keeps Google's room between keys" {
     var t: ui.Tester = undefined;
     try t.init(gpa, .init(&s, view.Nanolight.view), .{ .width = view.width, .height = view.max_height });
     defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(view.rows_height, s.last_h);
+    // No rows to speak of: the same height.
+    tests.press(&t, &.{.{ .insert = "2+2" }});
+    try std.testing.expectEqual(view.rows_height, s.last_h);
+    tests.press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward }, .{ .insert = "a" } });
+    // A full list: the same height, its last row below the fold.
+    var four: suggest.List = .{};
+    for ([_][]const u8{ "a1", "a2", "a3", "a4" }) |w| four.push(w);
+    s.answered("a", &four);
     t.frame();
-    t.textOps(&.{.{ .insert = "liq" }});
+    try std.testing.expectEqual(view.rows_height, s.last_h);
+    const fold = view.rows_height - view.footer_h;
+    const last = "Search X for “a”";
+    try std.testing.expect((t.findText(last) orelse return error.NoRow).y >= fold);
+    // The arrows bring it into view.
+    while (s.sel + 1 < s.res.n) _ = t.shortcut(.{ .key = ui.Shortcut.down });
     t.frame();
-    const bare = s.last_h;
-    // Google's rows: taller, in the one frame that lists them.
-    var said: suggest.List = .{};
-    for ([_][]const u8{ "liquid", "liquid glass" }) |w| said.push(w);
-    s.answered("liq", &said);
+    const shown = t.findText(last) orelse return error.NoRow;
+    try std.testing.expect(shown.y + shown.h <= fold);
+    // The wheel looks elsewhere, and stays there.
+    t.scroll(view.width / 2, 200, 80);
+    t.settle(1);
+    const looked = t.findText(last) orelse return error.NoRow;
+    try std.testing.expect(looked.y != shown.y);
+    t.settle(1);
+    try std.testing.expectEqual(looked.y, (t.findText(last) orelse return error.NoRow).y);
+    // Round to the first row: the top again.
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
     t.frame();
-    const full = s.last_h;
-    try std.testing.expect(full > bare);
-    // A key none of them begins with clears them, and the panel keeps
-    // their room.
-    t.textOps(&.{.{ .insert = "x" }});
-    t.frame();
-    try std.testing.expectEqual(@as(usize, 0), s.web.n);
-    try std.testing.expectEqual(full, s.last_h);
-    // An answer to older words is no answer to these.
-    s.unanswered("liq");
-    t.frame();
-    try std.testing.expectEqual(full, s.last_h);
-    // No answer is coming: the room goes, at once.
-    s.unanswered("liqx");
-    t.frame();
-    try std.testing.expectEqual(bare, s.last_h);
-    // Nothing is asked about an empty field, so nothing is kept for it.
-    s.answered("liqx", &said);
-    t.frame();
-    t.textOps(&.{ .{ .command = .select_all }, .{ .command = .delete_backward } });
-    t.frame();
-    try std.testing.expectEqual(s.height(), s.last_h);
-    try std.testing.expectEqual(@as(f32, 0), s.held_h);
+    try std.testing.expectEqual(@as(usize, 0), s.sel);
+    try std.testing.expect((t.findText(last) orelse return error.NoRow).y >= fold);
 }
 
 test "the highlight slides within a list, not as the list changes" {

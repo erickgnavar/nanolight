@@ -1,7 +1,5 @@
-//! Google's answers reaching the panel. Its rows clear with each key and
-//! come back a moment later (`suggest.pause_ms`, then the network), so the
-//! panel keeps their room until they do (`Nanolight.held_h`): its height
-//! changes once the rows are known, not down and up with every key.
+//! Google's answers reaching the panel, a moment after the keys that asked
+//! (`suggest.pause_ms`, then the network).
 const suggest = @import("suggest.zig");
 const Nanolight = @import("view.zig").Nanolight;
 const Row = @import("results.zig").Row;
@@ -22,7 +20,6 @@ pub fn answered(s: *Nanolight, typed: []const u8, said: *const suggest.List) voi
         was_len = w.len;
     };
     s.web = said.*;
-    s.held_h = 0;
     s.fill();
     s.sel = 0;
     const r = was orelse return;
@@ -38,10 +35,4 @@ pub fn answered(s: *Nanolight, typed: []const u8, said: *const suggest.List) voi
             return;
         }
     }
-}
-
-/// No answer to `typed` is coming (it failed, or was never sent): the room
-/// kept for it goes.
-pub fn unanswered(s: *Nanolight, typed: []const u8) void {
-    if (suggest.same(typed, s.query.text())) s.held_h = 0;
 }

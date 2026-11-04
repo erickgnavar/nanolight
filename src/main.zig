@@ -195,7 +195,7 @@ pub const Live = struct {
     fn ask(ctx: *anyopaque, query: []const u8) void {
         const l: *Live = @ptrCast(@alignCast(ctx));
         const q = std.mem.trim(u8, query, " ");
-        if (q.len > suggest.max_len) return l.s.unanswered(q);
+        if (q.len > suggest.max_len) return;
         @memcpy(l.asking[0..q.len], q);
         l.asking_len = q.len;
         l.waiting += 1;
@@ -211,8 +211,8 @@ pub const Live = struct {
     fn send(l: *Live) void {
         const q = l.asking[0..l.asking_len];
         // Typed on, or turned off, while it waited.
-        if (!l.s.suggest_on or !suggest.same(q, l.s.query.text())) return l.s.unanswered(q);
-        const a = l.app.gpa.create(Ask) catch return l.s.unanswered(q);
+        if (!l.s.suggest_on or !suggest.same(q, l.s.query.text())) return;
+        const a = l.app.gpa.create(Ask) catch return;
         a.* = .{ .live = l, .len = q.len };
         @memcpy(a.text[0..q.len], q);
         var buf: [512]u8 = undefined;
@@ -468,12 +468,13 @@ const Ask = struct {
     fn done(a: *Ask, r: nanoui.http.Response) void {
         const l = a.live;
         defer l.app.gpa.destroy(a);
-        defer if (l.window) |w| w.redraw();
+        if (r.status != 200) return;
         var arena: std.heap.ArenaAllocator = .init(l.app.gpa);
         defer arena.deinit();
         var list: suggest.List = .{};
-        if (r.status != 200 or !suggest.decode(arena.allocator(), r.body, a.text[0..a.len], &list)) return l.s.unanswered(a.text[0..a.len]);
+        if (!suggest.decode(arena.allocator(), r.body, a.text[0..a.len], &list)) return;
         l.s.answered(a.text[0..a.len], &list);
+        if (l.window) |w| w.redraw();
     }
 };
 
