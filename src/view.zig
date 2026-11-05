@@ -94,8 +94,6 @@ pub const Nanolight = struct {
     /// Return sends a Google search to the browser and ⌘↩ shows it in
     /// the panel, the other way round from the default (issue #10).
     searches_out: bool = false,
-    /// Claude's row is listed, under Grok's (`nanolight.claude`).
-    claude_on: bool = false,
     /// The panel's tint, chosen in Settings (`nanolight.theme`).
     theme: Theme = .system,
     /// Each showing gets a new one: the panel comes in again.
@@ -266,7 +264,7 @@ pub const Nanolight = struct {
             .bare = true,
             .size = 21,
             .width = .fill,
-            .placeholder = "Search apps, do math, ask Grok…",
+            .placeholder = "Search apps, do math, search the web…",
             .placeholder_color = p.sub.alpha(0.75),
             .color = p.text,
         });
@@ -332,7 +330,6 @@ pub const Nanolight = struct {
         var sug: [results.max_apps]u32 = undefined;
         const ns = s.index.suggestions(&sug);
         var web: [suggest.max_rows][]const u8 = undefined;
-        s.res.claude = s.claude_on;
         s.res.build(s.query.text(), s.index, sug[0..ns], s.web.slices(&web), &s.found);
     }
 
@@ -405,20 +402,9 @@ pub const Nanolight = struct {
                 const w = s.web.get(r.web);
                 ui.richText(c, w, s.added(i, w, p), .{ .size = 13.5, .color = p.text.alpha(0.72), .truncate = .ellipsis });
             },
-            .ask_grok, .ask_claude, .search_x, .search_web => {
-                const verb = switch (r.kind) {
-                    .ask_grok => "Ask Grok",
-                    .ask_claude => "Ask Claude",
-                    .search_x => "Search X for",
-                    else => "Search Google for",
-                };
-                ui.textf(c, .{ .size = 13.5, .weight = .medium, .color = p.text, .truncate = .ellipsis }, "{s} “{s}”", .{ verb, std.mem.trim(u8, q, " ") });
-                ui.text(c, switch (r.kind) {
-                    .ask_grok => "grok.com",
-                    .ask_claude => "claude.ai",
-                    .search_x => "x.com · Latest",
-                    else => "google.com",
-                }, .{ .size = 12, .color = p.sub.alpha(0.8) });
+            .search_web => {
+                ui.textf(c, .{ .size = 13.5, .weight = .medium, .color = p.text, .truncate = .ellipsis }, "Search Google for “{s}”", .{std.mem.trim(u8, q, " ")});
+                ui.text(c, "google.com", .{ .size = 12, .color = p.sub.alpha(0.8) });
             },
         }
         ui.spacer(c);
@@ -447,14 +433,8 @@ pub const Nanolight = struct {
         const side: f32 = if (big) 34 else 26;
         const box = ui.div(c).size(side, side).rounded(if (big) 9 else 7).bg(p.tile).center();
         defer box.end();
-        if (r.kind == .search_x) {
-            ui.text(c, "𝕏", .{ .size = 15, .weight = .bold, .color = p.text });
-            return;
-        }
         ui.icon(c, switch (r.kind) {
             .calc => "plus.forwardslash.minus",
-            .ask_grok => "sparkles",
-            .ask_claude => "sun.max",
             .search_web => "globe",
             .suggest => "magnifyingglass",
             .settings => "gearshape",
@@ -534,7 +514,6 @@ pub const Nanolight = struct {
                 s.go(s.index.apps.items[r.app].path);
             },
             .file => s.go(s.found.entries[r.file].path()),
-            .ask_grok, .ask_claude, .search_x => s.go(results.url(&s.url_buf, r.kind, s.query.text())),
             .search_web => s.search(s.query.text(), !s.searches_out),
             .settings => s.openSettings(),
             .pane => s.go(@import("settings_panes.zig").urls[r.app]),

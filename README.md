@@ -2,7 +2,7 @@
 
 <h1 align="center">Nanolight</h1>
 <p align="center"><b>A launcher for the Mac, Windows and Linux, drawn by <a href="https://github.com/justrach/nanoui">nanoui</a>.</b><br>
-Apps, math, Google, Grok, X and Raycast extensions: one keystroke away. Native Zig, no Electron, about 2 MB.</p>
+Apps, math, Google and Raycast extensions: one keystroke away. Native Zig, no Electron, about 2 MB.</p>
 
 <p align="center"><a href="https://github.com/justrach/nanolight/raw/refs/heads/main/docs/promo.mp4"><img src="docs/promo-preview.gif" alt="Introducing Nanolight 2.0, now on Mac, Windows and Linux, in 40 seconds: a MacBook Air and a Dell XPS 13 side by side, then Settings, a Raycast extension and a script command on a MacBook Air, then Windows and Linux on a Dell XPS 13" width="760"></a><br><sub><a href="https://github.com/justrach/nanolight/raw/refs/heads/main/docs/promo.mp4"><b>Watch it with sound →</b></a> · <a href="docs/promo.md">How it was made</a></sub></p>
 
@@ -16,7 +16,6 @@ Apps, math, Google, Grok, X and Raycast extensions: one keystroke away. Native Z
 - **Does math**: `2^10 * 3` answers 3,072 (and `0xC00`). Return copies it.
 - **Google suggestions**: up to four, under the apps, the words you add in bold. Nothing that reads as an address (a dot, a slash, an @) is sent.
 - **Results in the panel**: Return on a search shows Google's page in the panel itself. Esc goes back to the list, ⌘↩ opens it in your browser, ⌘[ goes back a page. Prefer the browser? Turn on **Open Searches in Browser** in Settings: Return opens your browser, and ⌘↩ shows the page in the panel.
-- **Ask Grok, search X**, a row away. **Ask Claude** too, once it's turned on in Settings.
 - **Raycast extensions**: extensions from the [Raycast Store's repository](https://github.com/raycast/extensions) (MIT) run in the panel: their lists, details and forms, their actions on ⌘K. Choose **Install Raycast Extension…** to search the store. They are React and TypeScript, so they need [Node.js](https://nodejs.org) 20 or later on your computer; Nanolight brings none, and runs them through its own version of `@raycast/api` ([raycast/README.md](raycast/README.md)). AI, OAuth and the menu bar aren't supported.
 - **Raycast script commands** ([raycast/script-commands](https://github.com/raycast/script-commands), MIT): any script with `@raycast.*` comments, dropped in the Script Commands folder, is a row. Nanolight runs it itself, no Node needed: its arguments as a form, its output as it prints (`fullOutput`), its last line (`compact`), or nothing (`silent`).
 - **Settings in the panel**: ⌘, (Ctrl+, on a PC), the gear in the footer, or type "settings".

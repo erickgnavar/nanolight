@@ -14,12 +14,12 @@ const Choice = shortcut.Choice;
 const Palette = panel.Palette;
 const mac = @import("builtin").os.tag == .macos;
 
-const RowKind = enum { choice, suggest, files, browser, claude, login, menu_bar, updates, welcome, quit, theme };
+const RowKind = enum { choice, suggest, files, browser, login, menu_bar, updates, welcome, quit, theme };
 const Theme = @import("palette.zig").Theme;
 
 /// As tall as its sections, never past the window. Tighter Mac spacing
-/// fits file search, where searches open, Claude's row and the menu bar icon.
-pub const height: f32 = if (mac) 562 else 516;
+/// fits file search, where searches open and the menu bar icon.
+pub const height: f32 = if (mac) 524 else 470;
 
 pub const Settings = struct {
     open: bool = false,
@@ -37,7 +37,6 @@ pub const Settings = struct {
     files: bool = false,
     /// Return sends searches to the browser (`Nanolight.searches_out`).
     browser: bool = false,
-    claude: bool = false,
     login: bool = false,
     menu_bar: bool = true,
     version: []const u8 = "0.1.0",
@@ -63,7 +62,6 @@ pub const Settings = struct {
         s.suggest = n.suggest_on;
         s.files = n.files_on;
         s.browser = n.searches_out;
-        s.claude = n.claude_on;
         const h = s.hooks(n) orelse return;
         s.menu_bar = h.menu_bar(h.ctx, null);
         s.choice = h.choice(h.ctx);
@@ -130,7 +128,6 @@ pub const Settings = struct {
         s.switchRow(c, n, p, rows, .suggest, "Google Suggestions");
         if (mac) s.switchRow(c, n, p, rows, .files, "File Search");
         if (mac) s.switchRow(c, n, p, rows, .browser, "Open Searches in Browser");
-        s.switchRow(c, n, p, rows, .claude, "Ask Claude");
         label(c, p, "This " ++ @import("results.zig").machine);
         s.switchRow(c, n, p, rows, .login, "Open at Login");
         if (mac) s.switchRow(c, n, p, rows, .menu_bar, "Show in Menu Bar");
@@ -210,7 +207,6 @@ pub const Settings = struct {
             .suggest => s.suggest,
             .files => s.files,
             .browser => s.browser,
-            .claude => s.claude,
             .login => s.login,
             .menu_bar => s.menu_bar,
             else => false,
@@ -248,12 +244,6 @@ pub const Settings = struct {
                 n.searches_out = !n.searches_out;
                 s.browser = n.searches_out;
                 if (h) |host| host.searches_out(host.ctx, s.browser);
-            },
-            .claude => {
-                n.claude_on = !n.claude_on;
-                s.claude = n.claude_on;
-                n.built = 1;
-                if (n.kv) |kv| kv.set(claude_key, if (n.claude_on) "1" else "0") catch {};
             },
             .login => {
                 const next = !s.login;
@@ -352,7 +342,7 @@ pub const Settings = struct {
         switch (kind) {
             // ←/→ step through the four; Return records one's own.
             .choice => if (mac) s.record(n, !s.recording) else s.nudge(n, rowList(), 1),
-            .suggest, .files, .browser, .claude, .login, .menu_bar => s.flip(n, kind),
+            .suggest, .files, .browser, .login, .menu_bar => s.flip(n, kind),
             .updates => if (h) |host| {
                 if (s.ready != null) host.restart(host.ctx) else host.check(host.ctx);
             },
@@ -366,18 +356,8 @@ pub const Settings = struct {
     }
 };
 
-/// Claude's row: off unless Settings turned it on.
-const claude_key = "nanolight.claude";
-
-/// Whether it was turned on, at launch.
-pub fn loadClaude(kv: nanoui.kv.Store, gpa: std.mem.Allocator) bool {
-    const v = kv.get(gpa, claude_key) catch null orelse return false;
-    defer gpa.free(v);
-    return std.mem.eql(u8, v, "1");
-}
-
 fn rowList() []const RowKind {
-    return if (mac) &.{ .choice, .suggest, .files, .browser, .claude, .login, .menu_bar, .updates, .welcome, .quit, .theme } else &.{ .choice, .suggest, .claude, .login, .updates, .welcome, .quit, .theme };
+    return if (mac) &.{ .choice, .suggest, .files, .browser, .login, .menu_bar, .updates, .welcome, .quit, .theme } else &.{ .choice, .suggest, .login, .updates, .welcome, .quit, .theme };
 }
 
 fn isSel(rows: []const RowKind, sel: usize, kind: RowKind) bool {

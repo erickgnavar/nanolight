@@ -46,8 +46,6 @@ test "files and extra section heads fit the original window" {
             try std.testing.expectEqual(@as(usize, if (std.mem.eql(u8, q, "settings")) 1 else 6), apps);
             try std.testing.expectEqual(@as(usize, 1), file_heads);
             if (exact) try std.testing.expectEqual(results.Kind.file, s.res.rows[0].kind);
-            try std.testing.expectEqual(results.Kind.ask_grok, s.res.rows[s.res.n - 2].kind);
-            try std.testing.expectEqual(results.Kind.search_x, s.res.rows[s.res.n - 1].kind);
             var google: usize = 0;
             for (s.res.slice()) |row| {
                 if (row.kind == .search_web) google += 1;
@@ -135,7 +133,7 @@ test "cached path rows are filtered without directory IO" {
     try std.testing.expectEqual(@as(usize, 0), found.n);
 }
 
-test "apps, panes, files, Google and Ask & Search share the window budget" {
+test "apps, panes, files and Google share the window budget" {
     if (@import("builtin").os.tag != .macos) return error.SkipZigTest;
     const t = std.testing;
     var ix: Index = .init(t.allocator);
@@ -165,7 +163,6 @@ test "apps, panes, files, Google and Ask & Search share the window budget" {
     var panes = false;
     var files = false;
     var google = false;
-    var ask = false;
     for (s.res.slice(), 0..) |row, i| {
         if (s.res.section(i) != null) heads += 1;
         switch (row.kind) {
@@ -173,13 +170,12 @@ test "apps, panes, files, Google and Ask & Search share the window budget" {
             .pane => panes = true,
             .file => files = true,
             .search_web => google = true,
-            .ask_grok => ask = true,
             else => {},
         }
     }
-    try t.expect(apps and panes and files and google and ask);
-    try t.expectEqual(@as(usize, 5), heads);
-    try t.expectEqual(results.max_rows - 2, s.res.n);
+    try t.expect(apps and panes and files and google);
+    try t.expectEqual(@as(usize, 4), heads);
+    try t.expectEqual(results.max_rows - 1, s.res.n);
     try t.expect(s.height() <= view.max_height);
 }
 

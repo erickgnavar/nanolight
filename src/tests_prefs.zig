@@ -9,7 +9,7 @@ const settings_view = @import("settings_view.zig");
 const tests = @import("tests.zig");
 const suggest = @import("suggest.zig");
 const mac = @import("builtin").os.tag == .macos;
-const placeholder = "Search apps, do math, ask Grok…";
+const placeholder = "Search apps, do math, search the web…";
 
 /// Where the field's placeholder is in the first frame after the panel
 /// shows, and once it has settled.
@@ -221,7 +221,7 @@ test "the panel keeps one height, and a long list shows whole rows" {
     tests.press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward } });
     fullList(&t, &s);
     try std.testing.expectEqual(view.rows_height, s.last_h);
-    const last = "Search X for “a”";
+    const last = "a3";
     const fold = view.rows_height - view.footer_h;
     // Below the fold it isn't drawn at all, rather than cut in half.
     try std.testing.expect(!t.hasText(last));
@@ -306,32 +306,30 @@ test "Google's last rows hold their places until it answers" {
     for ([_][]const u8{ "liquid", "liquid glass" }) |w| said.push(w);
     s.answered("liq", &said);
     t.frame();
-    const grok = (t.findText("Ask Grok “liq”") orelse return error.NoRow).y;
+    const held = (t.findText("liquid glass") orelse return error.NoRow).y;
     // A letter neither begins with: asked about, and nothing below moves.
     tests.press(&t, &.{.{ .insert = "x" }});
     try std.testing.expectEqualStrings("liqx", web.asked[0..web.asked_len]);
     try std.testing.expect(t.hasText("liquid glass"));
-    try std.testing.expectEqual(grok, (t.findText("Ask Grok “liqx”") orelse return error.NoRow).y);
+    try std.testing.expectEqual(held, (t.findText("liquid glass") orelse return error.NoRow).y);
     // The answer replaces them.
     var more: suggest.List = .{};
     for ([_][]const u8{ "liqxa", "liqxb" }) |w| more.push(w);
     s.answered("liqx", &more);
     t.frame();
     try std.testing.expect(!t.hasText("liquid glass"));
-    try std.testing.expectEqual(grok, (t.findText("Ask Grok “liqx”") orelse return error.NoRow).y);
+    try std.testing.expectEqual(held, (t.findText("liqxb") orelse return error.NoRow).y);
     // Words that are never asked about keep no rows.
     tests.press(&t, &.{.{ .insert = ".org" }});
     try std.testing.expectEqual(@as(usize, 0), s.web.n);
 }
 
-test "Ask Claude is off until Settings turns it on, and stays as it was left" {
+test "search and Settings have no assistant actions" {
     const gpa = std.testing.allocator;
     var ix: Index = .init(gpa);
     defer ix.deinit();
-    var mem: nanoui.kv.Memory = .{ .gpa = gpa };
-    defer mem.deinit();
     var web: tests.Web = .{};
-    var s: view.Nanolight = .{ .index = &ix, .kv = mem.store() };
+    var s: view.Nanolight = .{ .index = &ix };
     defer s.query.deinit();
     s.host = web.host();
     s.reveal();
@@ -339,38 +337,13 @@ test "Ask Claude is off until Settings turns it on, and stays as it was left" {
     try t.init(gpa, .init(&s, view.Nanolight.view), .{ .width = view.width, .height = view.max_height, .dark = true });
     defer t.deinit();
     t.settle(1);
-    try std.testing.expect(!settings_view.loadClaude(mem.store(), gpa));
-
     tests.press(&t, &.{.{ .insert = "liquid glass" }});
-    try std.testing.expect(!t.containsText("Ask Claude"));
-
-    // On: the row is there at once, and goes where Grok's does.
+    try std.testing.expectEqual(@as(usize, 1), s.res.n);
+    try std.testing.expectEqual(@import("results.zig").Kind.search_web, s.res.rows[0].kind);
     s.openSettings();
     t.settle(1);
-    try t.clickText("Ask Claude");
-    t.settle(1);
-    // The switch and everything under it fit Settings, on every platform.
+    try std.testing.expect(!t.containsText("Ask Claude"));
     const quit = t.findText("Quit Nanolight").?;
     try std.testing.expect(quit.y + quit.h <= settings_view.height);
     try std.testing.expect(settings_view.height <= view.max_height);
-    try std.testing.expect(s.claude_on and settings_view.loadClaude(mem.store(), gpa));
-    _ = t.shortcut(.{ .key = ui.Shortcut.escape });
-    t.settle(1);
-    try std.testing.expect(t.containsText("Ask Claude"));
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    tests.press(&t, &.{.{ .command = .insert_newline }});
-    try std.testing.expectEqualStrings("https://claude.ai/new?q=liquid+glass", web.probe.opened[0..web.probe.opened_len]);
-
-    // Off again: gone, the selection still on a row that exists.
-    s.reveal();
-    s.openSettings();
-    t.settle(1);
-    try t.clickText("Ask Claude");
-    t.settle(1);
-    try std.testing.expect(!s.claude_on and !settings_view.loadClaude(mem.store(), gpa));
-    _ = t.shortcut(.{ .key = ui.Shortcut.escape });
-    t.settle(1);
-    try std.testing.expect(!t.containsText("Ask Claude"));
-    try std.testing.expect(s.sel < s.res.n);
 }

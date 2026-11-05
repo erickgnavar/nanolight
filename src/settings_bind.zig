@@ -55,7 +55,6 @@ fn theme(ctx: *anyopaque, t: Theme) void {
 /// What Settings keeps on this machine alone, at launch.
 pub fn load(s: *@import("view.zig").Nanolight, kv: nanoui.kv.Store, gpa: @import("std").mem.Allocator) void {
     s.theme = loadTheme(kv, gpa);
-    s.claude_on = @import("settings_view.zig").loadClaude(kv, gpa);
 }
 
 /// The theme kept on this Mac, at launch.

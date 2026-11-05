@@ -132,14 +132,12 @@ test "the panel finds, moves, answers and hands off" {
     press(&t, &.{.{ .command = .insert_newline }});
     try std.testing.expectEqualStrings("3072", t.clipboard.items);
 
-    // Anything else: Google, Grok, X.
+    // Anything else: Google.
     press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward }, .{ .insert = "liquid glass" } });
     try std.testing.expect(!t.containsText("Ask Claude"));
-    try std.testing.expect(t.containsText("Search X for"));
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    try std.testing.expect(t.containsText("Search Google for"));
     press(&t, &.{.{ .command = .insert_newline }});
-    try std.testing.expectEqualStrings("https://x.com/search?f=live&q=liquid+glass", probe.opened[0..probe.opened_len]);
+    try std.testing.expectEqualStrings("https://www.google.com/search?q=liquid+glass", probe.opened[0..probe.opened_len]);
 
     // Escape clears the query, then closes.
     probe.hidden = false;
@@ -208,13 +206,9 @@ test "Google's completions land below, and a search shows in the panel" {
     try std.testing.expectEqual(@as(usize, 0), web.asked_len);
     press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward }, .{ .insert = "liquid gl" } });
     try std.testing.expectEqualStrings("liquid gl", web.asked[0..web.asked_len]);
-    // Return would search what was typed. The selection, moved before
-    // the answer comes, stays on its row, though the completions land
-    // above it, a key under the search.
+    // Return searches what was typed. The selection stays on that row
+    // when completions arrive beneath it.
     try std.testing.expectEqual(results.Kind.search_web, s.res.rows[s.sel].kind);
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    _ = t.shortcut(.{ .key = ui.Shortcut.down });
-    try std.testing.expectEqual(results.Kind.search_x, s.res.rows[s.sel].kind);
     var said: suggest.List = .{};
     for ([_][]const u8{ "liquid glass", "liquid glass apple" }) |w| said.push(w);
     s.answered("liquid gl", &said);
@@ -222,7 +216,7 @@ test "Google's completions land below, and a search shows in the panel" {
     try std.testing.expect(t.hasText("Google"));
     try std.testing.expect(t.hasText("liquid glass apple"));
     try std.testing.expectEqual(results.Kind.suggest, s.res.rows[1].kind);
-    try std.testing.expectEqual(results.Kind.search_x, s.res.rows[s.sel].kind);
+    try std.testing.expectEqual(results.Kind.search_web, s.res.rows[s.sel].kind);
     // The first completion shows faintly in the field; Tab takes it.
     try std.testing.expect(t.hasText("ass"));
     try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.tab }));
