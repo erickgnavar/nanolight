@@ -52,9 +52,11 @@ pub const Theme = enum {
     }
 };
 
+/// With the `system` theme, the built-in greys, or on Linux a
+/// theme.json's colors (linux_theme.zig). Any other theme tints the greys.
 pub fn palette(dark: bool, theme: Theme) Palette {
     const base = grey(dark);
-    const h = theme.hue(dark) orelse return base;
+    const h = theme.hue(dark) orelse return @import("linux_theme.zig").palette() orelse base;
     return if (dark) .{
         .text = base.text,
         .sub = base.sub.mix(h, 0.25),
@@ -80,7 +82,7 @@ pub fn tint(dark: bool, theme: Theme) ui.Color {
     return if (dark) ui.Color.black.mix(h, 0.22).alpha(0.55) else ui.Color.white.mix(h, 0.12).alpha(0.6);
 }
 
-fn grey(dark: bool) Palette {
+pub fn grey(dark: bool) Palette {
     return if (dark) .{
         .text = .hex(0xeeeeee),
         .sub = .hex(0xb5b5b5),
