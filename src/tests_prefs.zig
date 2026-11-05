@@ -323,3 +323,54 @@ test "Google's last rows hold their places until it answers" {
     tests.press(&t, &.{.{ .insert = ".org" }});
     try std.testing.expectEqual(@as(usize, 0), s.web.n);
 }
+
+test "Ask Claude is off until Settings turns it on, and stays as it was left" {
+    const gpa = std.testing.allocator;
+    var ix: Index = .init(gpa);
+    defer ix.deinit();
+    var mem: nanoui.kv.Memory = .{ .gpa = gpa };
+    defer mem.deinit();
+    var web: tests.Web = .{};
+    var s: view.Nanolight = .{ .index = &ix, .kv = mem.store() };
+    defer s.query.deinit();
+    s.host = web.host();
+    s.reveal();
+    var t: ui.Tester = undefined;
+    try t.init(gpa, .init(&s, view.Nanolight.view), .{ .width = view.width, .height = view.max_height, .dark = true });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expect(!settings_view.loadClaude(mem.store(), gpa));
+
+    tests.press(&t, &.{.{ .insert = "liquid glass" }});
+    try std.testing.expect(!t.containsText("Ask Claude"));
+
+    // On: the row is there at once, and goes where Grok's does.
+    s.openSettings();
+    t.settle(1);
+    try t.clickText("Ask Claude");
+    t.settle(1);
+    // The switch and everything under it fit Settings, on every platform.
+    const quit = t.findText("Quit Nanolight").?;
+    try std.testing.expect(quit.y + quit.h <= settings_view.height);
+    try std.testing.expect(settings_view.height <= view.max_height);
+    try std.testing.expect(s.claude_on and settings_view.loadClaude(mem.store(), gpa));
+    _ = t.shortcut(.{ .key = ui.Shortcut.escape });
+    t.settle(1);
+    try std.testing.expect(t.containsText("Ask Claude"));
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
+    tests.press(&t, &.{.{ .command = .insert_newline }});
+    try std.testing.expectEqualStrings("https://claude.ai/new?q=liquid+glass", web.probe.opened[0..web.probe.opened_len]);
+
+    // Off again: gone, the selection still on a row that exists.
+    s.reveal();
+    s.openSettings();
+    t.settle(1);
+    try t.clickText("Ask Claude");
+    t.settle(1);
+    try std.testing.expect(!s.claude_on and !settings_view.loadClaude(mem.store(), gpa));
+    _ = t.shortcut(.{ .key = ui.Shortcut.escape });
+    t.settle(1);
+    try std.testing.expect(!t.containsText("Ask Claude"));
+    try std.testing.expect(s.sel < s.res.n);
+}

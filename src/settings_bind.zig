@@ -58,8 +58,14 @@ fn theme(ctx: *anyopaque, t: Theme) void {
     if (live.window) |w| w.redraw();
 }
 
+/// What Settings keeps on this machine alone, at launch.
+pub fn load(s: *@import("view.zig").Nanolight, kv: nanoui.kv.Store, gpa: @import("std").mem.Allocator) void {
+    s.theme = loadTheme(kv, gpa);
+    s.claude_on = @import("settings_view.zig").loadClaude(kv, gpa);
+}
+
 /// The theme kept on this Mac, at launch.
-pub fn loadTheme(kv: nanoui.kv.Store, gpa: @import("std").mem.Allocator) Theme {
+fn loadTheme(kv: nanoui.kv.Store, gpa: @import("std").mem.Allocator) Theme {
     const v = kv.get(gpa, theme_key) catch null orelse return .system;
     defer gpa.free(v);
     return @import("std").meta.stringToEnum(Theme, v) orelse .system;

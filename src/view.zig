@@ -94,6 +94,8 @@ pub const Nanolight = struct {
     /// Return sends a Google search to the browser and ⌘↩ shows it in
     /// the panel, the other way round from the default (issue #10).
     searches_out: bool = false,
+    /// Claude's row is listed, under Grok's (`nanolight.claude`).
+    claude_on: bool = false,
     /// The panel's tint, chosen in Settings (`nanolight.theme`).
     theme: Theme = .system,
     /// Each showing gets a new one: the panel comes in again.
@@ -330,6 +332,7 @@ pub const Nanolight = struct {
         var sug: [results.max_apps]u32 = undefined;
         const ns = s.index.suggestions(&sug);
         var web: [suggest.max_rows][]const u8 = undefined;
+        s.res.claude = s.claude_on;
         s.res.build(s.query.text(), s.index, sug[0..ns], s.web.slices(&web), &s.found);
     }
 
