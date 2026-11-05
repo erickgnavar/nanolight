@@ -1,9 +1,8 @@
 //! What the Settings screen (settings_view.zig) asks of the app: the
-//! shortcut, opening at login, the Codegraff account, updates. Optional,
+//! shortcut, opening at login, updates. Optional,
 //! like the panel's other host callbacks: tests, the film and the promo
 //! draw Settings with defaults and call nothing.
 const shortcut = @import("shortcut.zig");
-const account = @import("account.zig");
 const Theme = @import("palette.zig").Theme;
 
 pub const SettingsHost = struct {
@@ -23,12 +22,6 @@ pub const SettingsHost = struct {
     theme: *const fn (ctx: *anyopaque, t: Theme) void,
     /// Whether the menu bar icon shows; `set` changes it first.
     menu_bar: *const fn (ctx: *anyopaque, set: ?bool) bool,
-    account: *const fn (ctx: *anyopaque) account.State,
-    email: *const fn (ctx: *anyopaque) []const u8,
-    sign_in: *const fn (ctx: *anyopaque) void,
-    sign_out: *const fn (ctx: *anyopaque) void,
-    /// Codegraff's terms and privacy, in the browser.
-    terms: *const fn (ctx: *anyopaque) void,
     /// The version running, and a newer one waiting (else null).
     version: *const fn (ctx: *anyopaque) []const u8,
     ready: *const fn (ctx: *anyopaque) ?[]const u8,

@@ -23,18 +23,6 @@ Apps, math, Google, Grok, X and Raycast extensions: one keystroke away. Native Z
 - **⌘1–⌘9** run a row at once; ↑ ↓ and ⌃N ⌃P move.
 - On the Mac it lives in the menu bar: no Dock icon, and nothing drawn while it's idle. **Show in Menu Bar** in Settings hides the icon; Settings stays a ⌘, away in the panel.
 
-## Sync across computers (optional)
-
-Off until you turn it on: choose **Sign In with Codegraff** in Settings (or the menu bar icon's menu on the Mac). Your browser opens codegraff.com to approve the sign-in, and from then on every computer signed in to the same account shares:
-
-- the key that opens Nanolight,
-- whether Google suggestions are on,
-- how often you open each app, so an empty panel suggests the same apps everywhere.
-
-Two Macs merge rather than overwrite: the key and the suggestions setting follow whichever Mac changed them last, and each app keeps its higher count. Nothing else is sent: no queries, no history, no files. The sign-in key is kept in your Keychain, and **Sign Out of Codegraff** revokes it.
-
-Syncing goes through your Codegraff account, so [Codegraff's terms](https://codegraff.com/terms) and [privacy policy](https://codegraff.com/privacy) apply to it. New accounts made by signing in from Nanolight get $2 of Codegraff credit.
-
 ## Install
 
 From the [latest release](https://github.com/justrach/nanolight/releases/latest):
@@ -75,7 +63,7 @@ cd raycast && npm test              # the Raycast extensions' host
 | `src/preview.zig` | The results page in the panel (WKWebView, the Mac) |
 | `src/panel_mac.zig`, `src/panel_pc.zig` | The panel's window on the Mac, and on Windows and Linux |
 | `src/linux_theme.zig` | Linux: the panel's colors, corners and font from an optional `~/.config/nanolight/theme.json`, else dark when gsettings says so |
-| `src/hotkey*.zig`, `src/apps_*.zig`, `src/single*.zig`, `src/login.zig`, `src/keychain*.zig` | Each platform's key, apps, single copy, login item and secret |
+| `src/hotkey*.zig`, `src/apps_*.zig`, `src/single*.zig`, `src/login.zig` | Each platform's key, apps, single copy and login item |
 | `src/raycast*.zig`, `raycast/` | Raycast extensions: the panel's screen, the Node host and its `@raycast/api` |
 | `src/script_commands.zig`, `src/script_run.zig` | Raycast script commands, run in Zig |
 | `src/onboard.zig`, `src/shortcut.zig`, `src/recorder.zig` | The welcome, which key is free, recording one's own |

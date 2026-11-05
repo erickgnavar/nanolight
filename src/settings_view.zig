@@ -1,6 +1,5 @@
 //! Settings, in the panel itself: the shortcut, Google's suggestions and
-//! where searches open, opening at login, the menu bar icon, syncing
-//! across Macs, updates. The same glass, the
+//! where searches open, opening at login, the menu bar icon and updates. The same glass, the
 //! same rows. Esc goes back to search; ↑/↓ move, Return and Space do the
 //! row. The shortcut is one of four, or any key recorded with ⌘, ⌥ or ⌃
 //! (the last chip). Without a host (tests, the film) it still draws, and changes
@@ -10,18 +9,17 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const panel = @import("view.zig");
 const shortcut = @import("shortcut.zig");
-const account = @import("account.zig");
 const SettingsHost = @import("settings_host.zig").SettingsHost;
 const Choice = shortcut.Choice;
 const Palette = panel.Palette;
 const mac = @import("builtin").os.tag == .macos;
 
-const RowKind = enum { choice, suggest, files, browser, claude, login, menu_bar, sync, terms, updates, welcome, quit, theme };
+const RowKind = enum { choice, suggest, files, browser, claude, login, menu_bar, updates, welcome, quit, theme };
 const Theme = @import("palette.zig").Theme;
 
 /// As tall as its sections, never past the window. Tighter Mac spacing
 /// fits file search, where searches open, Claude's row and the menu bar icon.
-pub const height: f32 = if (mac) 666 else 620;
+pub const height: f32 = if (mac) 562 else 516;
 
 pub const Settings = struct {
     open: bool = false,
@@ -42,8 +40,6 @@ pub const Settings = struct {
     claude: bool = false,
     login: bool = false,
     menu_bar: bool = true,
-    account: account.State = .signed_out,
-    email: []const u8 = "",
     version: []const u8 = "0.1.0",
     ready: ?[]const u8 = null,
 
@@ -73,15 +69,13 @@ pub const Settings = struct {
         s.choice = h.choice(h.ctx);
         if (s.choice.preset() == null) s.custom = s.choice;
         s.login = h.login(h.ctx, null);
-        s.account = h.account(h.ctx);
-        s.email = h.email(h.ctx);
         s.version = h.version(h.ctx);
         s.ready = h.ready(h.ctx);
     }
 
     pub fn view(s: *Settings, c: *ui.Context, n: *panel.Nanolight, p: Palette) void {
         s.pull(n);
-        const rows = rowList(s.account);
+        const rows = rowList();
         if (s.sel >= rows.len) s.sel = rows.len - 1;
         s.keys(c, n, rows);
         ui.key(c, "settings");
@@ -140,8 +134,6 @@ pub const Settings = struct {
         label(c, p, "This " ++ @import("results.zig").machine);
         s.switchRow(c, n, p, rows, .login, "Open at Login");
         if (mac) s.switchRow(c, n, p, rows, .menu_bar, "Show in Menu Bar");
-        label(c, p, if (@import("builtin").os.tag == .macos) "Sync Across Macs" else "Sync Across Computers");
-        s.sync(c, n, p, rows);
         label(c, p, "Updates");
         s.updates(c, n, p, rows);
         s.button(c, n, p, rows, .welcome, "Show Welcome Again");
@@ -275,35 +267,6 @@ pub const Settings = struct {
         }
     }
 
-    fn sync(s: *Settings, c: *ui.Context, n: *panel.Nanolight, p: Palette, rows: []const RowKind) void {
-        switch (s.account) {
-            .signed_out, .starting => {
-                s.button(c, n, p, rows, .sync, if (s.account == .starting) "Signing In…" else "Sign In with Codegraff");
-                s.termsLine(c, n, p, rows);
-            },
-            .waiting => {
-                ui.text(c, "Approve in your browser…", .{ .size = 13.5, .weight = .medium, .color = p.text });
-                s.button(c, n, p, rows, .sync, "Cancel");
-            },
-            .signed_in => {
-                const who = if (s.email.len > 0) s.email else "your Codegraff account";
-                ui.textf(c, .{ .size = 13.5, .weight = .medium, .color = p.text }, "Synced as {s}", .{who});
-                s.button(c, n, p, rows, .sync, "Sign Out");
-            },
-        }
-    }
-
-    fn termsLine(s: *Settings, c: *ui.Context, n: *panel.Nanolight, p: Palette, rows: []const RowKind) void {
-        const on = isSel(rows, s.sel, .terms);
-        ui.key(c, "terms");
-        const line = ui.div(c).row().wFull().h(28).px(4).gap(4).itemsCenter().rounded(8).control().bg(if (on) p.sel else p.fill.alpha(0));
-        defer line.end();
-        if (line.clicked()) s.activate(n, .terms);
-        ui.text(c, "Uses your Codegraff account; Codegraff's", .{ .size = 11.5, .color = p.sub.alpha(0.75) });
-        ui.text(c, "Terms & Privacy", .{ .size = 11.5, .weight = .medium, .color = p.text.alpha(0.9) });
-        ui.text(c, "apply", .{ .size = 11.5, .color = p.sub.alpha(0.75) });
-    }
-
     fn updates(s: *Settings, c: *ui.Context, n: *panel.Nanolight, p: Palette, rows: []const RowKind) void {
         ui.textf(c, .{ .size = 12.5, .color = p.sub }, "Nanolight {s}", .{s.version});
         const text = if (s.ready) |v| c.print("Restart to Update to {s}", .{v}) else "Check for Updates";
@@ -371,7 +334,7 @@ pub const Settings = struct {
     /// Return on the selected row. The field would have taken it.
     pub fn activateSelected(s: *Settings, n: *panel.Nanolight) void {
         s.pull(n);
-        const rows = rowList(s.account);
+        const rows = rowList();
         if (s.sel >= rows.len) return;
         s.activate(n, rows[s.sel]);
     }
@@ -388,14 +351,8 @@ pub const Settings = struct {
         const h = s.hooks(n);
         switch (kind) {
             // ←/→ step through the four; Return records one's own.
-            .choice => if (mac) s.record(n, !s.recording) else s.nudge(n, rowList(s.account), 1),
+            .choice => if (mac) s.record(n, !s.recording) else s.nudge(n, rowList(), 1),
             .suggest, .files, .browser, .claude, .login, .menu_bar => s.flip(n, kind),
-            .sync => if (h) |host| switch (s.account) {
-                .signed_out => host.sign_in(host.ctx),
-                .waiting, .signed_in => host.sign_out(host.ctx),
-                .starting => {},
-            },
-            .terms => if (h) |host| host.terms(host.ctx),
             .updates => if (h) |host| {
                 if (s.ready != null) host.restart(host.ctx) else host.check(host.ctx);
             },
@@ -419,11 +376,8 @@ pub fn loadClaude(kv: nanoui.kv.Store, gpa: std.mem.Allocator) bool {
     return std.mem.eql(u8, v, "1");
 }
 
-fn rowList(state: account.State) []const RowKind {
-    return switch (state) {
-        .signed_out, .starting => if (mac) &.{ .choice, .suggest, .files, .browser, .claude, .login, .menu_bar, .sync, .terms, .updates, .welcome, .quit, .theme } else &.{ .choice, .suggest, .claude, .login, .sync, .terms, .updates, .welcome, .quit, .theme },
-        .waiting, .signed_in => if (mac) &.{ .choice, .suggest, .files, .browser, .claude, .login, .menu_bar, .sync, .updates, .welcome, .quit, .theme } else &.{ .choice, .suggest, .claude, .login, .sync, .updates, .welcome, .quit, .theme },
-    };
+fn rowList() []const RowKind {
+    return if (mac) &.{ .choice, .suggest, .files, .browser, .claude, .login, .menu_bar, .updates, .welcome, .quit, .theme } else &.{ .choice, .suggest, .claude, .login, .updates, .welcome, .quit, .theme };
 }
 
 fn isSel(rows: []const RowKind, sel: usize, kind: RowKind) bool {

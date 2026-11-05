@@ -26,7 +26,7 @@ pub const Choice = struct {
     pub const opt_cmd_space: Choice = .{ .mods = hotkey.option | hotkey.cmd };
 
     pub const all = [_]Choice{ cmd_space, opt_space, ctrl_space, opt_cmd_space };
-    /// The names the offered ones are kept and synced by (as before).
+    /// The names the offered ones are kept by.
     const names = [_][]const u8{ "cmd_space", "opt_space", "ctrl_space", "opt_cmd_space" };
 
     pub fn eql(a: Choice, b: Choice) bool {
@@ -94,7 +94,7 @@ pub const Choice = struct {
         return c.mods & (hotkey.cmd | hotkey.option | hotkey.control) != 0 or isFunction(c.code);
     }
 
-    /// How it is kept and synced: an offered one's name, else
+    /// How it is kept: an offered one's name, else
     /// "key:<code>:<mods>:<char>" (older versions ignore it).
     pub fn name(c: Choice, buf: *[32]u8) []const u8 {
         if (c.preset()) |i| return names[i];

@@ -216,7 +216,7 @@ pub const Index = struct {
         if (store) |kv| ix.save(kv);
     }
 
-    /// Keeps every count in `kv` (as `opened` does, and a sync after it).
+    /// Keeps every count in `kv`.
     pub fn save(ix: *Index, kv: nanoui.kv.Store) void {
         var aw: std.Io.Writer.Allocating = .init(ix.gpa);
         defer aw.deinit();

@@ -399,7 +399,7 @@ pub const Nanolight = struct {
             .file => files_view.row(s, c, p, i, r),
             .settings => {
                 ui.text(c, "Nanolight Settings", .{ .size = 13.5, .weight = .medium, .color = p.text });
-                ui.text(c, "Shortcut, sync, updates", .{ .size = 12, .color = p.sub.alpha(0.8) });
+                ui.text(c, "Shortcut, preferences, updates", .{ .size = 12, .color = p.sub.alpha(0.8) });
             },
             .suggest => {
                 const w = s.web.get(r.web);

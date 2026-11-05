@@ -12,7 +12,6 @@ test {
     _ = @import("results.zig");
     _ = @import("suggest.zig");
     _ = @import("promo_camera.zig");
-    _ = @import("settings.zig");
     _ = @import("palette.zig");
     _ = @import("apps.zig");
     _ = @import("shortcut.zig");
@@ -381,11 +380,6 @@ pub const Prefs = struct {
             .searches_out = searchesOut,
             .theme = themeSet,
             .menu_bar = menuBar,
-            .account = acct,
-            .email = email,
-            .sign_in = noop,
-            .sign_out = noop,
-            .terms = noop,
             .version = ver,
             .ready = ready,
             .check = noop,
@@ -433,12 +427,6 @@ pub const Prefs = struct {
         if (set) |on| p.menu_bar_on = on;
         return p.menu_bar_on;
     }
-    fn acct(_: *anyopaque) @import("account.zig").State {
-        return .signed_out;
-    }
-    fn email(_: *anyopaque) []const u8 {
-        return "";
-    }
     fn ver(_: *anyopaque) []const u8 {
         return "0.1.0";
     }
@@ -479,8 +467,9 @@ test "settings opens from ⌘,, from typing, and from the gear" {
     try std.testing.expect(s.settings_ui.open);
     try std.testing.expect(t.hasText("Google Suggestions"));
     try std.testing.expect(t.hasText("Open at Login"));
-    try std.testing.expect(t.hasText("Sign In with Codegraff"));
-    try std.testing.expect(t.hasText("Terms & Privacy"));
+    try std.testing.expect(!t.containsText("Codegraff"));
+    try std.testing.expect(!t.containsText("Sync Across"));
+    try std.testing.expect(!t.hasText("Terms & Privacy"));
     try std.testing.expect(t.hasText("Check for Updates"));
     _ = t.shortcut(.{ .key = ui.Shortcut.escape });
     t.settle(1);
@@ -593,5 +582,6 @@ test "on a PC the panel's keys are Ctrl's, and Settings says so" {
     try std.testing.expect(s.settings_ui.open);
     try std.testing.expect(t.hasText("This PC"));
     try std.testing.expect(t.hasText("Alt Space"));
-    try std.testing.expect(t.hasText("Sync Across Computers"));
+    try std.testing.expect(!t.containsText("Sync Across"));
+    try std.testing.expect(t.hasText("Check for Updates"));
 }

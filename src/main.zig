@@ -27,9 +27,7 @@ const Preview = preview_mod.Preview;
 const single = @import("single.zig");
 const ClickThrough = if (mac) @import("clickthrough.zig").ClickThrough else @import("pc_stubs.zig").ClickThrough;
 const Recorder = if (mac) @import("recorder.zig").Recorder else @import("pc_stubs.zig").Recorder;
-const account = @import("account.zig");
 const rc = @import("raycast_live.zig");
-const Settings = @import("settings.zig").Settings;
 const suggest_key = "nanolight.suggest";
 /// "1": Return opens searches in the browser (issue #10).
 const searches_out_key = "nanolight.searches_out";
@@ -50,11 +48,8 @@ pub fn loginItem(ctx: *anyopaque, set: ?bool) bool {
 /// The version 0.1.6 and before left when they restarted into an update
 /// themselves (nanoui's updater does it now, `autoRestart`).
 pub const updated_key = "nanolight.updated";
-/// When this Mac last changed its key or suggestions (settings.zig's `at`).
-const sync_at_key = "nanolight.sync.at";
-
 /// The app around the panel: its window, shown and hidden (panel_mac.zig,
-/// panel_pc.zig), its key, its menu, its updates and its account.
+/// panel_pc.zig), its key, its menu and its updates.
 pub const Live = struct {
     app: *nanoui.App,
     s: *Nanolight,
@@ -78,10 +73,6 @@ pub const Live = struct {
     updater: ?*nanoui.Updater = null,
     tray: ?*nanoui.Tray = null,
     update_label: [64]u8 = undefined,
-    /// Signed in to Codegraff, settings synced between Macs (account.zig).
-    /// Null in headless runs.
-    acct: ?account.Account = null,
-    account_label: [192]u8 = undefined,
     /// Raycast extensions: the command running in the panel (raycast_live.zig).
     ext_ui: @import("raycast_view.zig").Ext = undefined,
     runner: @import("raycast.zig").Runner = undefined,
@@ -114,81 +105,7 @@ pub const Live = struct {
             }.f);
         } else {
             _ = apps.launch(l.app.io, target);
-            // Its count went up: the other Macs suggest it too.
-            if (l.acct) |*a| a.changed();
         }
-    }
-
-    // ----- sync (account.zig) -----
-
-    fn accountHooks(l: *Live) account.Hooks {
-        return .{ .ctx = l, .snapshot = snapshot, .apply = applySynced, .changed = accountChanged };
-    }
-
-    fn snapshot(ctx: *anyopaque, arena: std.mem.Allocator) Settings {
-        const l: *Live = @ptrCast(@alignCast(ctx));
-        const ix = l.s.index;
-        var list: std.ArrayList(@import("settings.zig").Launch) = .empty;
-        for (ix.apps.items, ix.launches.items) |a, n| if (n > 0) list.append(arena, .{ .name = a.name, .path = a.path, .count = n }) catch break;
-        var at: i64 = 0;
-        if (l.kv.get(arena, sync_at_key) catch null) |v| at = std.fmt.parseInt(i64, v, 10) catch 0;
-        const name = arena.create([32]u8) catch return .{ .hotkey = "cmd_space", .suggest = l.s.suggest_on, .at = at, .launches = list.items };
-        return .{ .hotkey = l.choice.name(name), .suggest = l.s.suggest_on, .at = at, .launches = list.items };
-    }
-
-    /// The account's settings, merged: the key, the suggestions, the counts.
-    fn applySynced(ctx: *anyopaque, st: Settings) void {
-        const l: *Live = @ptrCast(@alignCast(ctx));
-        var at: [24]u8 = undefined;
-        l.kv.set(sync_at_key, std.fmt.bufPrint(&at, "{d}", .{st.at}) catch "0") catch {};
-        if (shortcut.Choice.parse(st.hotkey)) |c| if (!c.eql(l.choice)) {
-            shortcut.save(l.kv, c);
-            l.useKey(c);
-        };
-        if (st.suggest != l.s.suggest_on) {
-            l.s.suggest_on = st.suggest;
-            l.kv.set(suggest_key, if (st.suggest) "1" else "0") catch {};
-        }
-        const ix = l.s.index;
-        for (st.launches) |la| {
-            const i = if (la.path.len > 0)
-                ix.findPath(la.path) orelse ix.find(la.name)
-            else
-                ix.find(la.name);
-            if (i) |idx| ix.launches.items[idx] = @max(ix.launches.items[idx], la.count);
-        }
-        ix.save(l.kv);
-        l.s.built = 1;
-        l.menu();
-        if (l.window) |w| w.redraw();
-    }
-
-    fn accountChanged(ctx: *anyopaque) void {
-        menu(@ptrCast(@alignCast(ctx)));
-    }
-
-    /// This Mac chose its key or turned suggestions on or off, just now.
-    fn touched(l: *Live) void {
-        var at: [24]u8 = undefined;
-        l.kv.set(sync_at_key, std.fmt.bufPrint(&at, "{d}", .{account.now()}) catch "0") catch {};
-        if (l.acct) |*a| a.changed();
-    }
-
-    fn accountClick(l: *Live, _: *nanoui.menu.Item) void {
-        const a = if (l.acct) |*x| x else return;
-        switch (a.state) {
-            .signed_out => a.signIn(),
-            .starting => {},
-            .waiting, .signed_in => a.signOut(),
-        }
-    }
-
-    fn openTerms(_: *Live, _: *nanoui.menu.Item) void {
-        _ = nanoui.shell.openUrl(account.terms_url);
-    }
-
-    fn accountItems(l: *Live) [2]nanoui.menu.MenuItem {
-        return @import("account_menu.zig").items(if (l.acct) |*x| x else null, &l.account_label, .of(l, Live.accountClick), .of(l, Live.openTerms));
     }
 
     /// Google is asked once typing pauses (`suggest.pause_ms`).
@@ -247,7 +164,6 @@ pub const Live = struct {
     pub fn toggleSuggest(l: *Live, item: *nanoui.menu.Item) void {
         l.s.suggest_on = item.checked;
         l.kv.set(suggest_key, if (item.checked) "1" else "0") catch {};
-        l.touched();
         // The rows again, with or without them.
         l.s.built = 1;
         if (l.window) |w| w.redraw();
@@ -280,15 +196,11 @@ pub const Live = struct {
         const t = l.tray orelse return;
         const ready = if (l.updater) |u| u.ready() else null;
         const label = if (ready) |v| std.fmt.bufPrint(&l.update_label, "Restart to Update to {s}", .{v}) catch "Restart to Update" else "Check for Updates";
-        const acc = l.accountItems();
         t.setMenu("Nanolight", &.{
             .{ .label = "Settings…", .accelerator = "Cmd+,", .click = .of(l, Live.menuSettings) },
             .{ .label = "Open Nanolight", .click = .of(l, Live.menuShow) },
             .{ .label = "Welcome…", .click = .of(l, Live.welcome) },
             .{ .label = "Google Suggestions", .kind = .checkbox, .checked = l.s.suggest_on, .click = .of(l, Live.toggleSuggest) },
-            .separator,
-            acc[0],
-            acc[1],
             .separator,
             .{ .label = label, .disabled = l.updater == null, .click = .of(l, Live.updateNow) },
             .{ .label = "Quit Nanolight", .role = .quit },
@@ -354,7 +266,6 @@ pub const Live = struct {
         w.show();
         panel.shown(w);
         l.through.start();
-        if (l.acct) |*a| a.maybePull();
         w.redraw();
     }
 
@@ -392,7 +303,6 @@ pub const Live = struct {
         const l: *Live = @ptrCast(@alignCast(ctx));
         shortcut.save(l.kv, choice);
         l.useKey(choice);
-        l.touched();
     }
 
     fn fix(ctx: *anyopaque, clash: shortcut.Clash) void {
@@ -580,9 +490,6 @@ pub fn main(init: std.process.Init) !void {
         // 10 s, unseen, and comes back as it was (update_pc.zig off the Mac).
         u.autoRestart(app, .{ .idle_ms = 10 * 1000 });
     };
-    // Signed in before: synced now. Signing in is from the menu.
-    live.acct = .{ .gpa = init.gpa, .kv = kv, .hooks = live.accountHooks() };
-    live.acct.?.load();
     live.menu();
     // Restarted by an automatic update: quietly, the panel saying so the
     // next time it opens. Otherwise launching shows the panel.
