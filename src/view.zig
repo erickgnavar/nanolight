@@ -73,6 +73,7 @@ pub const spring: motion.Spring = .{ .stiffness = 320, .damping = 32 };
 
 pub const Palette = @import("palette.zig").Palette;
 pub const palette = @import("palette.zig").palette;
+pub const Theme = @import("palette.zig").Theme;
 
 pub const Nanolight = struct {
     index: *Index,
@@ -93,6 +94,8 @@ pub const Nanolight = struct {
     /// Return sends a Google search to the browser and ⌘↩ shows it in
     /// the panel, the other way round from the default (issue #10).
     searches_out: bool = false,
+    /// The panel's tint, chosen in Settings (`nanolight.theme`).
+    theme: Theme = .system,
     /// Each showing gets a new one: the panel comes in again.
     shown: u32 = 0,
     copied_at: f64 = -10,
@@ -157,10 +160,10 @@ pub const Nanolight = struct {
     }
 
     pub fn panel(s: *Nanolight, c: *ui.Context) void {
-        const p = palette(c.theme.dark);
+        const p = palette(c.theme.dark, s.theme);
         const shell = ui.div(c).column().w(width).rounded(18).border(p.hair).clip();
         if (s.own_glass) {
-            _ = shell.glass(.{ .tint = if (c.theme.dark) ui.Color.black.alpha(0.42) else ui.Color.white.alpha(0.5) })
+            _ = shell.glass(.{ .tint = @import("palette.zig").tint(c.theme.dark, s.theme) })
                 .shadows(&.{ .{ .color = .{ .a = 0.22 }, .blur = 4, .y = 1 }, .{ .color = .{ .a = 0.28 }, .blur = 40, .y = 18 } });
         } else {
             // The system's shadow is off (its outline drew a black ring
