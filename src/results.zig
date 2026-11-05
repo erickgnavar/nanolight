@@ -1,9 +1,9 @@
 //! What the panel lists for a query, in order: the answer when it is math,
 //! the apps that match it (or, with no query, suggestions), then Google:
 //! a search for exactly what is typed, first, and Google's completions of
-//! it under that, a key or two away; last, the query asked of Grok or
-//! Claude, or searched on X. With no app or answer, Return searches what was typed
-//! (as an address bar's does). Completions land a moment after the rest;
+//! it under that, a key or two away; last, the query asked of Grok (and of
+//! Claude, if turned on in Settings) or searched on X. With no app or answer,
+//! Return searches what was typed (as an address bar's does). Completions land a moment after the rest;
 //! the panel keeps the selection on the row it was on (`Nanolight.answered`).
 const std = @import("std");
 const search = @import("search.zig");
@@ -89,14 +89,15 @@ pub const max_apps = 6;
 pub const max_panes = 3;
 /// Google's completions fill what room is left, up to four.
 pub const max_web = 4;
-/// Every app and the four web rows leave room for two completions.
-pub const max_rows = max_apps + handoffs + 2;
-/// The web rows that always follow the apps: Google, Grok, Claude, X.
-const handoffs = 4;
+/// Every app and the four web rows leave room for two completions; without
+/// Claude's, for three: the panel is one length either way.
+pub const max_rows = max_apps + 4 + 2;
 
 pub const Results = struct {
     rows: [max_rows]Row = undefined,
     n: usize = 0,
+    /// Claude's row is listed, which Settings turns on.
+    claude: bool = false,
     /// No query: the apps are suggestions, nothing else is listed.
     suggested: bool = false,
     /// The math's answer, as shown.
@@ -145,6 +146,9 @@ pub const Results = struct {
         const heads: usize = 2 + @as(usize, @intFromBool(n > 0)) + @as(usize, @intFromBool(np > 0)) +
             @as(usize, @intFromBool(settings)) + @as(usize, @intFromBool(found.n > 0));
         const limit = max_rows -| (heads -| 3);
+        // The web rows that always follow the apps: Google, Grok, X, and
+        // Claude when it's on.
+        const handoffs: usize = 3 + @as(usize, @intFromBool(r.claude));
         const fixed = handoffs + @as(usize, @intFromBool(settings));
         const first_pane: usize = @intFromBool(np > 0);
         const file_row: usize = @intFromBool(found.n > 0);
@@ -167,12 +171,12 @@ pub const Results = struct {
             r.push(.{ .kind = .file, .file = @intCast(i), .match = found.entries[i].match });
         };
         // The search for what was typed, its completions (as many as leave
-        // room for the rest), then Grok, Claude and X.
+        // room for the rest), then Grok, Claude if it's on, and X.
         const room = limit -| r.n -| handoffs;
         r.push(.{ .kind = .search_web });
         for (0..@min(web.len, max_web, room)) |i| r.push(.{ .kind = .suggest, .web = @intCast(i) });
         r.push(.{ .kind = .ask_grok });
-        r.push(.{ .kind = .ask_claude });
+        if (r.claude) r.push(.{ .kind = .ask_claude });
         r.push(.{ .kind = .search_x });
     }
 
@@ -236,11 +240,28 @@ fn testIndex(a: std.mem.Allocator, names: []const []const u8) !Index {
     return ix;
 }
 
+test "Claude's row is listed only when it's on, and gives its row back when not" {
+    const t = std.testing;
+    var ix: Index = .init(t.allocator);
+    defer ix.deinit();
+    const none: files.List = .{ .allocator = t.allocator };
+    const web = [_][]const u8{ "a", "b", "c", "d" };
+    var off: Results = .{};
+    off.build("liquid gl", &ix, &.{}, &web, &none);
+    for (off.slice()) |row| try t.expect(row.kind != .ask_claude);
+    try t.expectEqual(Kind.ask_grok, off.rows[off.n - 2].kind);
+    var on: Results = .{ .claude = true };
+    on.build("liquid gl", &ix, &.{}, &web, &none);
+    try t.expectEqual(Kind.ask_claude, on.rows[on.n - 2].kind);
+    // With this few apps Google keeps all four either way.
+    try t.expectEqual(off.n + 1, on.n);
+}
+
 test "math first, then apps; ask and search only without an answer" {
     const t = std.testing;
     var ix = try testIndex(t.allocator, &.{ "Safari", "System Settings", "Calculator" });
     defer ix.deinit();
-    var r: Results = .{};
+    var r: Results = .{ .claude = true };
     r.build("saf", &ix, &.{}, &.{}, &.{});
     try t.expectEqual(Kind.app, r.rows[0].kind);
     try t.expectEqual(@as(u32, 0), r.rows[0].app);
@@ -322,7 +343,7 @@ test "a full list of apps and three panes still fits, with every handoff" {
     // Keyboard): typing "hola" used to overflow the room left for Google.
     var ix = try testIndex(t.allocator, &.{ "Home", "Hopper", "Hotspot Shield", "Photos", "Shortcuts", "Photo Booth", "Phone" });
     defer ix.deinit();
-    var r: Results = .{};
+    var r: Results = .{ .claude = true };
     const web = [_][]const u8{ "hola", "hotmail", "hoy", "horoscopo" };
     r.build("ho", &ix, &.{}, &web, &.{});
     var apps_n: usize = 0;

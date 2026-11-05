@@ -46,8 +46,7 @@ test "files and extra section heads fit the original window" {
             try std.testing.expectEqual(@as(usize, if (std.mem.eql(u8, q, "settings")) 1 else 6), apps);
             try std.testing.expectEqual(@as(usize, 1), file_heads);
             if (exact) try std.testing.expectEqual(results.Kind.file, s.res.rows[0].kind);
-            try std.testing.expectEqual(results.Kind.ask_grok, s.res.rows[s.res.n - 3].kind);
-            try std.testing.expectEqual(results.Kind.ask_claude, s.res.rows[s.res.n - 2].kind);
+            try std.testing.expectEqual(results.Kind.ask_grok, s.res.rows[s.res.n - 2].kind);
             try std.testing.expectEqual(results.Kind.search_x, s.res.rows[s.res.n - 1].kind);
             var google: usize = 0;
             for (s.res.slice()) |row| {
