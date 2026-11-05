@@ -132,9 +132,11 @@ test "the panel finds, moves, answers and hands off" {
     press(&t, &.{.{ .command = .insert_newline }});
     try std.testing.expectEqualStrings("3072", t.clipboard.items);
 
-    // Anything else: Google, Grok, X.
+    // Anything else: Google, Grok, Claude, X.
     press(&t, &.{ .{ .command = .select_all }, .{ .command = .delete_backward }, .{ .insert = "liquid glass" } });
+    try std.testing.expect(t.containsText("Ask Claude"));
     try std.testing.expect(t.containsText("Search X for"));
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
     _ = t.shortcut(.{ .key = ui.Shortcut.down });
     _ = t.shortcut(.{ .key = ui.Shortcut.down });
     press(&t, &.{.{ .command = .insert_newline }});
@@ -211,6 +213,7 @@ test "Google's completions land below, and a search shows in the panel" {
     // the answer comes, stays on its row, though the completions land
     // above it, a key under the search.
     try std.testing.expectEqual(results.Kind.search_web, s.res.rows[s.sel].kind);
+    _ = t.shortcut(.{ .key = ui.Shortcut.down });
     _ = t.shortcut(.{ .key = ui.Shortcut.down });
     _ = t.shortcut(.{ .key = ui.Shortcut.down });
     try std.testing.expectEqual(results.Kind.search_x, s.res.rows[s.sel].kind);

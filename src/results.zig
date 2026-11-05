@@ -2,7 +2,7 @@
 //! the apps that match it (or, with no query, suggestions), then Google:
 //! a search for exactly what is typed, first, and Google's completions of
 //! it under that, a key or two away; last, the query asked of Grok or
-//! searched on X. With no app or answer, Return searches what was typed
+//! Claude, or searched on X. With no app or answer, Return searches what was typed
 //! (as an address bar's does). Completions land a moment after the rest;
 //! the panel keeps the selection on the row it was on (`Nanolight.answered`).
 const std = @import("std");
@@ -23,6 +23,7 @@ pub const Kind = enum {
     app,
     file,
     ask_grok,
+    ask_claude,
     search_x,
     search_web,
     /// One of Google's completions (`Row.web`).
@@ -40,7 +41,7 @@ pub const Kind = enum {
             .file => "File",
             .settings => "Nanolight",
             .pane => "System Settings",
-            .ask_grok, .search_x, .search_web, .suggest => "Web",
+            .ask_grok, .ask_claude, .search_x, .search_web, .suggest => "Web",
         };
     }
 
@@ -53,6 +54,7 @@ pub const Kind = enum {
             .settings => "Open Settings",
             .pane => "Open in System Settings",
             .ask_grok => "Ask Grok",
+            .ask_claude => "Ask Claude",
             .search_x => "Search X",
             .search_web, .suggest => "Search Google",
         };
@@ -66,7 +68,7 @@ pub const Kind = enum {
             .settings => "Nanolight",
             .pane => "System Settings",
             .search_web, .suggest => "Google",
-            .ask_grok, .search_x => "Ask & Search",
+            .ask_grok, .ask_claude, .search_x => "Ask & Search",
         };
     }
 };
@@ -87,10 +89,10 @@ pub const max_apps = 6;
 pub const max_panes = 3;
 /// Google's completions fill what room is left, up to four.
 pub const max_web = 4;
-/// Every app and the three web rows leave room for three completions.
-pub const max_rows = max_apps + 3 + 3;
-/// The web rows that always follow the apps: Google, Grok, X.
-const handoffs = 3;
+/// Every app and the four web rows leave room for two completions.
+pub const max_rows = max_apps + handoffs + 2;
+/// The web rows that always follow the apps: Google, Grok, Claude, X.
+const handoffs = 4;
 
 pub const Results = struct {
     rows: [max_rows]Row = undefined,
@@ -165,11 +167,12 @@ pub const Results = struct {
             r.push(.{ .kind = .file, .file = @intCast(i), .match = found.entries[i].match });
         };
         // The search for what was typed, its completions (as many as leave
-        // room for the rest), then Grok and X.
+        // room for the rest), then Grok, Claude and X.
         const room = limit -| r.n -| handoffs;
         r.push(.{ .kind = .search_web });
         for (0..@min(web.len, max_web, room)) |i| r.push(.{ .kind = .suggest, .web = @intCast(i) });
         r.push(.{ .kind = .ask_grok });
+        r.push(.{ .kind = .ask_claude });
         r.push(.{ .kind = .search_x });
     }
 
@@ -201,6 +204,7 @@ pub const Results = struct {
 pub fn url(buf: []u8, kind: Kind, query: []const u8) []const u8 {
     const base = switch (kind) {
         .ask_grok => "https://grok.com/?q=",
+        .ask_claude => "https://claude.ai/new?q=",
         .search_x => "https://x.com/search?f=live&q=",
         .search_web, .suggest => "https://www.google.com/search?q=",
         .calc, .app, .file, .settings, .pane => return "",
@@ -240,7 +244,7 @@ test "math first, then apps; ask and search only without an answer" {
     r.build("saf", &ix, &.{}, &.{}, &.{});
     try t.expectEqual(Kind.app, r.rows[0].kind);
     try t.expectEqual(@as(u32, 0), r.rows[0].app);
-    try t.expectEqual(Kind.search_web, r.rows[r.n - 3].kind);
+    try t.expectEqual(Kind.search_web, r.rows[r.n - 4].kind);
     try t.expectEqualStrings("Applications", r.section(0).?);
     try t.expectEqualStrings("Google", r.section(1).?);
     try t.expectEqualStrings("Ask & Search", r.section(2).?);
@@ -254,18 +258,19 @@ test "math first, then apps; ask and search only without an answer" {
     try t.expectEqual(@as(usize, 2), r.n);
     try t.expectEqualStrings("Suggestions", r.section(0).?);
     r.build("liquid glass", &ix, &.{}, &.{}, &.{});
-    try t.expectEqual(@as(usize, 3), r.n);
+    try t.expectEqual(@as(usize, 4), r.n);
     // No app: the search for what was typed comes first.
     try t.expectEqual(Kind.search_web, r.rows[0].kind);
     try t.expectEqualStrings("Google", r.section(0).?);
     try t.expectEqualStrings("Ask & Search", r.section(1).?);
-    // Completions under it, in the same section, then Grok and X.
+    // Completions under it, in the same section, then Grok, Claude and X.
     r.build("liquid gl", &ix, &.{}, &.{ "liquid glass", "liquid glue" }, &.{});
-    try t.expectEqual(@as(usize, 5), r.n);
+    try t.expectEqual(@as(usize, 6), r.n);
     try t.expectEqual(Kind.search_web, r.rows[0].kind);
     try t.expectEqual(Kind.suggest, r.rows[1].kind);
     try t.expectEqual(@as(u8, 1), r.rows[2].web);
     try t.expectEqual(Kind.ask_grok, r.rows[3].kind);
+    try t.expectEqual(Kind.ask_claude, r.rows[4].kind);
     try t.expect(r.section(1) == null and r.section(2) == null);
     try t.expectEqualStrings("Ask & Search", r.section(3).?);
     // "settings": System Settings first, Nanolight's own a row under it.
@@ -286,6 +291,7 @@ test "math first, then apps; ask and search only without an answer" {
 test "queries are escaped into the address" {
     var buf: [128]u8 = undefined;
     try std.testing.expectEqualStrings("https://x.com/search?f=live&q=liquid+glass+%26+UI", url(&buf, .search_x, " liquid glass & UI "));
+    try std.testing.expectEqualStrings("https://claude.ai/new?q=what+is+zig%3F", url(&buf, .ask_claude, "what is zig?"));
 }
 
 test "System Settings' panes come under the apps and keep the list's length (#12)" {
@@ -330,11 +336,13 @@ test "a full list of apps and three panes still fits, with every handoff" {
     // The header costs a row: two panes, not three.
     try t.expect(panes_n <= max_panes - 1);
     try t.expect(r.n <= max_rows - @as(usize, @intFromBool(panes_n > 0)));
-    try t.expectEqual(Kind.search_web, r.rows[r.n - 3].kind);
-    try t.expectEqual(Kind.ask_grok, r.rows[r.n - 2].kind);
+    try t.expectEqual(Kind.search_web, r.rows[r.n - 4].kind);
+    try t.expectEqual(Kind.ask_grok, r.rows[r.n - 3].kind);
+    try t.expectEqual(Kind.ask_claude, r.rows[r.n - 2].kind);
     try t.expectEqual(Kind.search_x, r.rows[r.n - 1].kind);
     // With files too there are five heads: every section keeps a row, and
-    // the apps keep the rest.
+    // the apps keep the rest (one fewer since Claude's row: no completion
+    // is left to give it up).
     var found: files.List = .{ .allocator = t.allocator };
     defer found.deinit();
     for (0..files.max_rows) |i| {
@@ -344,10 +352,10 @@ test "a full list of apps and three panes still fits, with every handoff" {
     r.build("ho", &ix, &.{}, &web, &found);
     var counts = std.enums.EnumArray(Kind, usize).initFill(0);
     for (r.slice()) |row| counts.set(row.kind, counts.get(row.kind) + 1);
-    try t.expectEqual(@as(usize, max_apps - 1), counts.get(.app));
+    try t.expectEqual(@as(usize, max_apps - 2), counts.get(.app));
     try t.expectEqual(@as(usize, 1), counts.get(.pane));
     try t.expectEqual(@as(usize, 1), counts.get(.file));
     try t.expectEqual(@as(usize, max_rows - 2), r.n);
-    try t.expectEqual(Kind.search_web, r.rows[r.n - 3].kind);
+    try t.expectEqual(Kind.search_web, r.rows[r.n - 4].kind);
     try t.expectEqual(Kind.search_x, r.rows[r.n - 1].kind);
 }
