@@ -25,10 +25,14 @@ test {
     _ = @import("tests_ext.zig");
     _ = @import("tests_prefs.zig");
     _ = @import("tests_files.zig");
+    _ = @import("row_window.zig");
+    _ = @import("answers.zig");
+    _ = @import("tests_panel.zig");
     switch (@import("builtin").os.tag) {
         .macos => {
             _ = @import("single_mac.zig");
             _ = @import("clickthrough.zig");
+            _ = @import("panel_mac.zig");
             _ = @import("hotkey_mac.zig");
             _ = @import("recorder.zig");
         },
@@ -548,13 +552,13 @@ test "the panel never outgrows its window, which is never resized" {
     }
     try std.testing.expect(tallest <= view.max_height);
     // "a" fills every app row there is, and Google's completions the
-    // rest: the bound is the real one.
+    // rest: they scroll, and the panel keeps its height.
     s.query.set("a");
     s.rebuild();
     var four: @import("suggest.zig").List = .{};
     for ([_][]const u8{ "a1", "a2", "a3", "a4" }) |w| four.push(w);
     s.answered("a", &four);
-    try std.testing.expectEqual(view.max_height, s.height());
+    try std.testing.expectEqual(view.rows_height, s.height());
     var o: onboard.Onboard = .{};
     for ([_]onboard.Step{ .key, .try_it, .done }) |step| {
         o.step = step;

@@ -195,7 +195,7 @@ pub const Live = struct {
     fn ask(ctx: *anyopaque, query: []const u8) void {
         const l: *Live = @ptrCast(@alignCast(ctx));
         const q = std.mem.trim(u8, query, " ");
-        if (q.len > suggest.max_len) return l.s.unanswered(q);
+        if (q.len > suggest.max_len) return;
         @memcpy(l.asking[0..q.len], q);
         l.asking_len = q.len;
         l.waiting += 1;
@@ -211,7 +211,7 @@ pub const Live = struct {
     fn send(l: *Live) void {
         const q = l.asking[0..l.asking_len];
         // Typed on, or turned off, while it waited.
-        if (!l.s.suggest_on or !suggest.same(q, l.s.query.text())) return l.s.unanswered(q);
+        if (!l.s.suggest_on or !suggest.same(q, l.s.query.text())) return;
         const a = l.app.gpa.create(Ask) catch return l.s.unanswered(q);
         a.* = .{ .live = l, .len = q.len };
         @memcpy(a.text[0..q.len], q);
@@ -227,7 +227,7 @@ pub const Live = struct {
     fn showPage(ctx: *anyopaque, url: ?[]const u8) void {
         const l: *Live = @ptrCast(@alignCast(ctx));
         const w = l.window orelse return;
-        if (url) |u| l.preview.show(w, u, l.s.last_h) else l.preview.hide();
+        if (url) |u| panel.showPage(&l.preview, w, u, l.s.last_h) else panel.hidePage(&l.preview, w);
     }
 
     /// Escape or ⌘↩ while the page has the keys.
@@ -335,10 +335,9 @@ pub const Live = struct {
     /// The window (or the Mac's glass under the panel) to its height.
     fn resize(ctx: *anyopaque, h: f32) void {
         const l: *Live = @ptrCast(@alignCast(ctx));
-        l.preview.fit(h);
         // The panel grew or shrank under a still pointer.
         l.through.update();
-        if (l.window) |w| panel.resize(w, h);
+        if (l.window) |w| panel.resize(w, h, &l.preview);
     }
 
     fn toggle(ctx: *anyopaque) void {

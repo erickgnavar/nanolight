@@ -94,7 +94,7 @@ pub const List = struct {
         return out[0..l.n];
     }
 
-    fn has(l: *const List, s: []const u8) bool {
+    pub fn has(l: *const List, s: []const u8) bool {
         for (0..l.n) |i| if (same(l.get(i), s)) return true;
         return false;
     }
