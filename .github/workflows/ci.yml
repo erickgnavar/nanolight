@@ -13,8 +13,8 @@ jobs:
   macos:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - uses: actions/checkout@v7.0.1
+      - uses: mlugg/setup-zig@v2.2.1
         with:
           version: 0.17.0
       - run: zig build test
@@ -25,10 +25,10 @@ jobs:
 
   # The tests on Linux, where they draw with nanoui's own text and renderer.
   linux:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - uses: actions/checkout@v7.0.1
+      - uses: mlugg/setup-zig@v2.2.1
         with:
           version: 0.17.0
       - run: zig build test
