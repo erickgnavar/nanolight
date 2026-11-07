@@ -44,7 +44,7 @@ jobs:
     continue-on-error: ${{ matrix.os == 'macos-14' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Which releases
         id: which
@@ -73,7 +73,7 @@ jobs:
           TYPING_EXPECT: ${{ github.event_name == 'pull_request' && 'any' || 'clean' }}
         run: sh macos/verify-update.sh "${{ steps.which.outputs.from }}" "${{ steps.which.outputs.to }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: screens-${{ matrix.os }}

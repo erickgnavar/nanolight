@@ -41,11 +41,9 @@ jobs:
       AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
       AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.17.0
+      - uses: jdx/mise-action@v5.2.7
 
       - name: Signing identity
         if: env.MACOS_CERT_P12 != ''
@@ -109,7 +107,7 @@ jobs:
             validate zig-out/package/nanolight-macos-arm64.dmg
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: nanolight-macos-arm64
           path: |
@@ -144,7 +142,7 @@ jobs:
 
   publish:
     needs: verify
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: The latest release, for everyone
         env:
